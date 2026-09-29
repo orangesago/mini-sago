@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { OracleAnswerJob } from "../../contracts/worker-contract";
-import { prepareDeveloperWorkspace } from "./developer-workspace";
+import {
+  developerBranchName,
+  prepareDeveloperWorkspace,
+} from "./developer-workspace";
 
 const roots: string[] = [];
 
@@ -39,7 +42,147 @@ function job(): OracleAnswerJob {
   };
 }
 
+async function localCommand(command: string[], environment = {}) {
+  const child = Bun.spawn(command, {
+    env: { ...process.env, ...environment },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) throw new Error(stderr);
+  return stdout.trim();
+}
+
+async function legacyWorkspace() {
+  const settings = await options();
+  const taskJob = { ...job(), developerTask: { id: "task-456" } };
+  const directory = join(
+    settings.githubWorktreeRoot,
+    "task-456",
+    "sago-cream",
+    "mini-sago",
+  );
+  await mkdir(directory, { recursive: true });
+  const git = (...args: string[]) =>
+    localCommand(["git", "-C", directory, ...args]);
+  await git("init", "--initial-branch=main");
+  await git("config", "user.name", "Test");
+  await git("config", "user.email", "test@example.com");
+  await Bun.write(join(directory, "tracked.txt"), "committed");
+  await git("add", "tracked.txt");
+  await git("commit", "-m", "chore: fixture");
+  await git("switch", "-c", "minisago/task-456");
+  return { settings, taskJob, directory, git };
+}
+
 describe("developer workspace", () => {
+  test("generates conventional branch names without conflating normalized IDs", () => {
+    const ids = [
+      "task-123",
+      "Task-123",
+      "task_123",
+      "task.123",
+      "task--123",
+      "task_",
+      "A",
+    ];
+    const branches = ids.map(developerBranchName);
+    for (const branch of branches) {
+      expect(branch).toMatch(/^chore\/[a-z0-9]+(-[a-z0-9]+)*$/u);
+    }
+    expect(new Set(branches).size).toBe(ids.length);
+  });
+
+  test.each([undefined, "session-123"])(
+    "migrates a legacy branch and preserves work with session %s",
+    async (resumeSessionId) => {
+      const { settings, taskJob, directory, git } = await legacyWorkspace();
+      const head = await git("rev-parse", "HEAD");
+      await Bun.write(join(directory, "tracked.txt"), "staged");
+      await git("add", "tracked.txt");
+      await Bun.write(join(directory, "tracked.txt"), "unstaged");
+      await Bun.write(join(directory, "untracked.txt"), "keep");
+      const resumedJob = {
+        ...taskJob,
+        developerTask: { ...taskJob.developerTask, resumeSessionId },
+      };
+      const workspace = await prepareDeveloperWorkspace(
+        resumedJob,
+        settings,
+        localCommand,
+      );
+      expect(await git("branch", "--show-current")).toBe(
+        "chore/minisago-task-456",
+      );
+      expect(await git("rev-parse", "HEAD")).toBe(head);
+      expect(await git("show", ":tracked.txt")).toBe("staged");
+      expect(await Bun.file(join(directory, "tracked.txt")).text()).toBe(
+        "unstaged",
+      );
+      expect(await Bun.file(join(directory, "untracked.txt")).text()).toBe(
+        "keep",
+      );
+      expect(workspace.environment.MINISAGO_GIT_BRANCH).toBe(
+        "chore/minisago-task-456",
+      );
+      await prepareDeveloperWorkspace(resumedJob, settings, localCommand);
+      expect(await git("rev-parse", "HEAD")).toBe(head);
+
+      const remote = join(settings.githubWorktreeRoot, "remote.git");
+      await localCommand(["git", "init", "--bare", remote]);
+      await git("remote", "add", "origin", remote);
+      const wrapper = join(workspace.environment.PATH!.split(":")[0]!, "git");
+      // The wrapper checks the current directory, just as a task's shell does.
+      const push = async () => {
+        const child = Bun.spawn(
+          [
+            wrapper,
+            "push",
+            "origin",
+            `HEAD:refs/heads/${workspace.environment.MINISAGO_GIT_BRANCH}`,
+          ],
+          {
+            cwd: directory,
+            env: { ...process.env, ...workspace.environment },
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
+        const stderr = await new Response(child.stderr).text();
+        return { code: await child.exited, stderr };
+      };
+      expect((await push()).code).toBe(0);
+      expect(
+        await localCommand([
+          "git",
+          "--git-dir",
+          remote,
+          "rev-parse",
+          "refs/heads/chore/minisago-task-456",
+        ]),
+      ).toBe(head);
+      await git("switch", "-c", "fix/unprepared");
+      const denied = await push();
+      expect(denied.code).toBe(77);
+      expect(denied.stderr).toContain("unprepared branch");
+    },
+  );
+
+  test("does not overwrite a destination branch during migration", async () => {
+    const { settings, taskJob, git } = await legacyWorkspace();
+    await git("branch", "chore/minisago-task-456");
+    const head = await git("rev-parse", "HEAD");
+    await expect(
+      prepareDeveloperWorkspace(taskJob, settings, localCommand),
+    ).rejects.toThrow("already exists");
+    expect(await git("branch", "--show-current")).toBe("minisago/task-456");
+    expect(await git("rev-parse", "chore/minisago-task-456")).toBe(head);
+  });
+
   test("clones only the selected repo with the dedicated credential", async () => {
     const commands: Array<{
       command: string[];
@@ -93,7 +236,7 @@ describe("developer workspace", () => {
         ({ environment }) => environment.GH_CONFIG_DIR === "/secrets/github",
       ),
     ).toBe(true);
-    expect(commands[1]!.command.at(-1)).toBe("minisago/job-123");
+    expect(commands[1]!.command.at(-1)).toBe("chore/minisago-job-123");
   });
 
   test("never supplies the deployment socket as a writable directory", async () => {
@@ -169,7 +312,11 @@ describe("developer workspace", () => {
     );
 
     expect(resumed.directory).toBe(first.directory);
-    expect(commands).toHaveLength(2);
+    expect(commands).toHaveLength(3);
+    expect(commands[2]).toContain("for-each-ref");
+    expect(resumed.environment.MINISAGO_GIT_BRANCH).toBe(
+      "chore/minisago-task-456",
+    );
     await resumed.cleanup();
   });
 
@@ -265,8 +412,9 @@ test("retains dirty files and scratch files when a turn never produced a session
   const second = await prepareDeveloperWorkspace(
     { ...taskJob, id: "turn-two" },
     opts,
-    async () => {
-      throw new Error("Must not clone or reset an existing workspace");
+    async (command) => {
+      expect(command[3]).toBe("for-each-ref");
+      return "";
     },
   );
   expect(await Bun.file(join(second.directory, "uncommitted.txt")).text()).toBe(

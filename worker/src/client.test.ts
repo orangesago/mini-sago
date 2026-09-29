@@ -20,7 +20,7 @@ const job: ChatbotJob = {
 describe("worker failure reporting", () => {
   test("reports enough context to diagnose and retry a coding failure", () => {
     expect(formatJobFailure(job, "testing", "Network timeout")).toBe(
-      "Phase: testing\nCause: Network timeout\nRepository: sago-cream/mini-sago\nBranch: minisago/task-456\nRetry: safe\nLogs: worker job job-123",
+      "Phase: testing\nCause: Network timeout\nRepository: sago-cream/mini-sago\nBranch: chore/minisago-task-456\nRetry: safe\nLogs: worker job job-123",
     );
   });
 

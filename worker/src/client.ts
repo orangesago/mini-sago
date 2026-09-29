@@ -20,6 +20,7 @@ import { ChatbotTraceStore } from "./trace-store";
 import { readCodexUsage } from "./codex-usage";
 import { CodexAppServerManager } from "./codex-app-server";
 import { SkillbookSync } from "./skillbook";
+import { developerBranchName } from "./developer-workspace";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const AUTH_RETRY_MS = 30_000;
@@ -42,7 +43,7 @@ export function formatJobFailure(
       cause,
     );
   const branch = job.developerTask
-    ? `minisago/${job.developerTask.id}`
+    ? developerBranchName(job.developerTask.id)
     : undefined;
   return [
     `Phase: ${phase}`,
