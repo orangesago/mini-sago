@@ -1,4 +1,5 @@
 import { access, chmod, mkdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 
 import type { OracleAnswerJob } from "../../contracts/worker-contract";
@@ -99,6 +100,18 @@ function safeJobId(jobId: string) {
   return jobId;
 }
 
+export function developerBranchName(workspaceId: string) {
+  const slug = workspaceId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-|-$/gu, "");
+  const suffix =
+    slug === workspaceId
+      ? slug
+      : `${slug || "task"}-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 12)}`;
+  return `chore/minisago-${suffix}`;
+}
+
 function selectedRepository(job: OracleAnswerJob, repositories: string[]) {
   const repository = repositories.find(
     (candidate) =>
@@ -115,7 +128,7 @@ type RunCommand = (
   command: string[],
   environment: Record<string, string>,
   signal?: AbortSignal,
-) => Promise<void>;
+) => Promise<string | void>;
 
 async function run(
   command: string[],
@@ -129,7 +142,7 @@ async function run(
   });
   const stop = () => child.kill();
   signal?.addEventListener("abort", stop, { once: true });
-  const [, stderr, exitCode] = await Promise.all([
+  const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
@@ -144,6 +157,7 @@ async function run(
         `Repository preparation exited with status ${exitCode}.`,
     );
   }
+  return stdout;
 }
 
 export async function prepareDeveloperWorkspace(
@@ -156,7 +170,7 @@ export async function prepareDeveloperWorkspace(
   const jobRoot = resolve(options.githubWorktreeRoot, safeJobId(workspaceId));
   const directory = join(jobRoot, ...repository.split("/"));
   const binDirectory = join(jobRoot, "bin");
-  const branch = `minisago/${safeJobId(workspaceId)}`;
+  const branch = developerBranchName(workspaceId);
   const preparationEnvironment = {
     GH_CONFIG_DIR: options.githubConfigDir,
     GH_HOST: "github.com",
@@ -201,6 +215,30 @@ export async function prepareDeveloperWorkspace(
       preparationEnvironment,
       options.signal,
     );
+  } else {
+    const legacyBranch = `minisago/${workspaceId}`;
+    const legacyRef = `refs/heads/${legacyBranch}`;
+    const refs = await runCommand(
+      [
+        "git",
+        "-C",
+        directory,
+        "for-each-ref",
+        "--format=%(refname)",
+        legacyRef,
+      ],
+      preparationEnvironment,
+      options.signal,
+    );
+    if (refs?.trim().split("\n").includes(legacyRef)) {
+      // Rename without checkout/reset so staged and uncommitted work survives.
+      // Git refuses to overwrite an existing destination branch.
+      await runCommand(
+        ["git", "-C", directory, "branch", "-m", legacyBranch, branch],
+        preparationEnvironment,
+        options.signal,
+      );
+    }
   }
   // Refresh policy on continuation after a worker upgrade.
   const ghWrapper = join(binDirectory, "gh");
