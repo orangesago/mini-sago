@@ -102,7 +102,7 @@ In the configured repository under **Settings → Webhooks**, create:
 - Secret: `GITHUB_WEBHOOK_SECRET`
 - Events: **Pull requests** only
 
-In `sago-cream/skillbook`, create a second webhook with the same payload URL,
+In `sago-cream/skills`, create a second webhook with the same payload URL,
 content type, and secret. Subscribe it to **Pushes** only. A push to `main`
 queues an immediate refresh on the connected Oracle worker.
 
