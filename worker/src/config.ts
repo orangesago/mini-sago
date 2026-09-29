@@ -75,7 +75,7 @@ export function configuredSkillbookRepository(
   headless: boolean,
   configured = process.env.MINISAGO_SKILLBOOK_REPOSITORY,
 ) {
-  return configured?.trim() || (headless ? "sago-cream/skillbook" : undefined);
+  return configured?.trim() || (headless ? "sago-cream/skills" : undefined);
 }
 
 async function isExecutable(path: string) {

@@ -5,7 +5,7 @@ import { readJsonFile, writeJsonFile } from "./job-utils";
 import { macAgentBridge } from "../../chatbot/bridge";
 
 const TARGET_REPOSITORY = "sago-cream/health-check-system";
-const SKILLBOOK_REPOSITORY = "sago-cream/skillbook";
+const SKILLBOOK_REPOSITORY = "sago-cream/skills";
 const DEFAULT_THREAD_CHANNEL_ID = "1521506395034226830";
 const DEFAULT_STATE_FILE = ".data/github-pr-threads.json";
 const PUBLIC_THREAD_TYPE = 11;

@@ -96,7 +96,7 @@ describe("GitHub PR webhook", () => {
         webhookRequest(
           {
             ref: "refs/heads/main",
-            repository: { full_name: "sago-cream/skillbook" },
+            repository: { full_name: "sago-cream/skills" },
           },
           secret,
           "push",

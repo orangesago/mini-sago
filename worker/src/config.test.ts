@@ -13,7 +13,7 @@ import {
 describe("worker configuration", () => {
   test("syncs Skillbook on Oracle without managing Mac skills", () => {
     expect(configuredSkillbookRepository(true, undefined)).toBe(
-      "sago-cream/skillbook",
+      "sago-cream/skills",
     );
     expect(configuredSkillbookRepository(false, undefined)).toBeUndefined();
     expect(configuredSkillbookRepository(false, "owner/skillbook")).toBe(
