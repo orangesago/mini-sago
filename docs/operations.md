@@ -68,6 +68,17 @@ connects through the local `sago-cloud` SSH alias over Tailscale and retries
 connection timeouts three times. Use `SAGO_CLOUD_HOST` only for a replacement
 host.
 
+For Mac deployments, the `sago-cream.github` Tailscale profile must use **Exit
+Node → None**, not Automatic/Recommended. Disconnect, select that profile, and
+clear its exit node before connecting. The CLI equivalent, with that profile
+already selected, is `tailscale set --exit-node=`; this changes the preference
+without connecting. Use `tailscale switch --list` to check the selected profile
+and `tailscale debug prefs` to confirm `ExitNodeID`, `ExitNodeIP`, and
+`AutoExitNode` are empty or unset. Do not restore `auto:any` during deployment
+cleanup: it can leave this profile without working internet access. Preserve
+NTHUSA's separate NAS exit-node preference and restore the original selected
+profile and connection state after deployment.
+
 On the Sago Cloud Oracle worker, `MINISAGO_DEPLOY_SOCKET` replaces SSH with the
 bounded host socket. The script submits the exact `origin/main` commit and
 returns after the host accepts it, before the deployment replaces the bot and
