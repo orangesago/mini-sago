@@ -127,8 +127,10 @@ not automatically deleted. The existing thread registry is still in memory and
 expires after three idle days, so restarting the core requires manual task
 recovery. Preserve unfinished work before manually retiring its workspace.
 
-Human participants in an owner-created coding thread can steer its active turn
-or continue its saved task. Each follow-up includes fresh nearby thread messages
+The owner can steer coding tasks everywhere. Other human participants can steer
+an active turn or continue a saved task only in guilds registered under
+`developer_steering`. Guild `1521168712579682567` is initially registered; owner
+feature commands can enable, disable, or remove guild registrations. Each follow-up includes fresh nearby thread messages
 and attachment references, and `resolve_context` reads live history from that
 thread. Bot and webhook messages do not steer coding tasks. Participant direction
 stays within the existing task; only the owner can authorize a PR merge or

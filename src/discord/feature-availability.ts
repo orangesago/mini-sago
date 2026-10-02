@@ -11,6 +11,8 @@ export const SCOPED_FEATURE_DEFINITIONS = {
   trip_planner: "Expose the shared Kyushu itinerary tools.",
   ccxp_meetings:
     "Search protected NTHU meeting records during related discussions. Owner registration is guild-only; requires a configured CCXP index.",
+  developer_steering:
+    "Let non-owner humans steer existing coding tasks. Requires explicit guild registration; the owner can steer everywhere.",
 } as const;
 
 export type ScopedFeatureId = keyof typeof SCOPED_FEATURE_DEFINITIONS;
@@ -83,6 +85,10 @@ export function defaultFeatureAvailability(
           "1000249491494019092",
         ]),
       },
+      developer_steering: {
+        defaultEnabled: false,
+        rules: enabledRules("guild", ["1521168712579682567"]),
+      },
     },
   };
 }
@@ -101,6 +107,11 @@ function assertSnapshot(value: unknown): FeatureAvailabilitySnapshot {
     snapshot.features.ccxp_meetings = defaultFeatureAvailability(
       {},
     ).features.ccxp_meetings;
+  }
+  if (snapshot.features.developer_steering === undefined) {
+    snapshot.features.developer_steering = defaultFeatureAvailability(
+      {},
+    ).features.developer_steering;
   }
   for (const feature of Object.keys(
     SCOPED_FEATURE_DEFINITIONS,
@@ -121,12 +132,12 @@ function assertSnapshot(value: unknown): FeatureAvailabilitySnapshot {
       throw new Error(`Feature availability has invalid ${feature} rules.`);
     }
     if (
-      feature === "ccxp_meetings" &&
+      (feature === "ccxp_meetings" || feature === "developer_steering") &&
       (policy.defaultEnabled ||
         policy.rules.some((rule) => rule.scope !== "guild"))
     ) {
       throw new Error(
-        "CCXP requires explicit guild registrations with a disabled default.",
+        `${feature} requires explicit guild registrations with a disabled default.`,
       );
     }
   }
@@ -160,7 +171,11 @@ export class FeatureAvailabilityStore {
     feature: ScopedFeatureId,
     context: { guildId?: string; channelId?: string },
   ) {
-    if (feature === "ccxp_meetings" && !context.guildId) return false;
+    if (
+      (feature === "ccxp_meetings" || feature === "developer_steering") &&
+      !context.guildId
+    )
+      return false;
     const policy = this.snapshot.features[feature];
     const channelRule = context.channelId
       ? policy.rules.find(
@@ -179,9 +194,13 @@ export class FeatureAvailabilityStore {
   }
 
   configure(input: FeatureAvailabilityMutation): Promise<FeaturePolicy> {
-    if (input.feature === "ccxp_meetings" && input.scope !== "guild") {
+    if (
+      (input.feature === "ccxp_meetings" ||
+        input.feature === "developer_steering") &&
+      input.scope !== "guild"
+    ) {
       return Promise.reject(
-        new Error("CCXP registration requires guild scope."),
+        new Error(`${input.feature} registration requires guild scope.`),
       );
     }
     if (!DISCORD_SNOWFLAKE.test(input.targetId)) {
