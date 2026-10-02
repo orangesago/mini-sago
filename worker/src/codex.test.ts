@@ -359,15 +359,15 @@ describe("Codex chatbot runner", () => {
     );
   });
 
-  test("uses GPT-6 Luna for chat and routing, then Astra low for owner dev work", () => {
+  test("uses GPT-6.1 Sol medium for chat and xhigh for owner dev work", () => {
     expect(CHATBOT_MODEL_VERBOSITY).toBe("medium");
     expect(COMMUNITY_CHATBOT_PROFILE).toEqual({
-      model: "gpt-6-luna",
-      reasoningEffort: "high",
+      model: "gpt-6.1-sol",
+      reasoningEffort: "medium",
     });
     expect(OWNER_CHATBOT_PROFILE).toEqual({
-      model: "gpt-6-astra",
-      reasoningEffort: "low",
+      model: "gpt-6.1-sol",
+      reasoningEffort: "xhigh",
     });
     expect(VOICE_CHATBOT_PROFILE).toEqual({
       model: "gpt-6-luna",

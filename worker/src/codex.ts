@@ -93,16 +93,16 @@ export function minisagoMcpApprovalMode(
 }
 
 export const COMMUNITY_CHATBOT_PROFILE = {
-  model: "gpt-6-luna",
-  reasoningEffort: "high",
+  model: "gpt-6.1-sol",
+  reasoningEffort: "medium",
 } as const;
 export const VOICE_CHATBOT_PROFILE = {
   model: "gpt-6-luna",
   reasoningEffort: "low",
 } as const;
 export const OWNER_CHATBOT_PROFILE = {
-  model: "gpt-6-astra",
-  reasoningEffort: "low",
+  model: "gpt-6.1-sol",
+  reasoningEffort: "xhigh",
 } as const;
 export const OWNER_ROUTER_PROFILE = {
   model: "gpt-6-luna",
