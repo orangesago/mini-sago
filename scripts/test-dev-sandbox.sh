@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
-# The runtime stage pins the same Codex and Bun versions as production. No login,
-# model call, GitHub access, or production mount is used by this smoke test.
-docker build --target runtime -f Dockerfile.worker -t minisago-dev-runtime:test .
+# Test the stable Codex release used by worker image builds. No login, model call,
+# GitHub access, or production mount is used by this smoke test.
+codex_version="${CODEX_VERSION:-$(bash scripts/resolve-codex-version.sh)}"
+docker build --target runtime -f Dockerfile.worker \
+  --build-arg "CODEX_VERSION=$codex_version" -t minisago-dev-runtime:test .
 case "$(docker info --format '{{json .SecurityOptions}}')" in
   *apparmor*) apparmor_profile=minisago-worker ;;
   *) apparmor_profile=unconfined ;;

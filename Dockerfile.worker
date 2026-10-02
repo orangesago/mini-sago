@@ -1,7 +1,5 @@
 FROM oven/bun:1.3.9-debian AS runtime
 
-ARG CODEX_VERSION=0.160.0
-
 USER root
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -21,10 +19,13 @@ RUN apt-get update \
     webp \
   && rm -rf /var/lib/apt/lists/* \
   && ln -s /usr/local/bin/bun /usr/local/bin/node \
-  && BUN_INSTALL=/usr/local bun add --global "@openai/codex@${CODEX_VERSION}" \
   && git config --system user.name Hsi \
   && git config --system user.email 94444077+sago-cream@users.noreply.github.com \
   && git config --system credential.https://github.com.helper '!/usr/bin/gh auth git-credential'
+
+ARG CODEX_VERSION=0.160.0
+RUN BUN_INSTALL=/usr/local bun add --global "@openai/codex@${CODEX_VERSION}" \
+  && codex --version
 
 FROM runtime AS worker
 
