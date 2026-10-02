@@ -70,10 +70,10 @@ routing, evidence retrieval, and answering unless its required profile changes.
    hosted service validates and posts the result to Discord.
 7. The MCP token is revoked and the worker reservation is released.
 
-Community and owner chat use GPT-5.6 Luna with high reasoning. The owner router
-uses Luna with low reasoning; selected development work uses GPT-5.6 Sol with
-medium reasoning. Ordinary stages have a two-minute timeout, while final owner
-development answers may run for 15 minutes.
+Community and owner chat use GPT-6.1 Sol with medium reasoning. The owner router,
+voice chat, and social actions use GPT-6 Luna with low reasoning; selected
+development work uses GPT-6.1 Sol with xhigh reasoning. Ordinary stages have a
+two-minute timeout, while final owner development answers may run for 15 minutes.
 
 ## Context and MCP
 
