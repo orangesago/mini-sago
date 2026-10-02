@@ -534,6 +534,26 @@ describe("Codex chatbot runner", () => {
     expect(prompt).not.toContain("referenceResolution");
   });
 
+  test("distinguishes collaborator direction from owner authorization in preserved coding tasks", () => {
+    const participantJob = oracleJob({
+      requesterUserId: ACCESS_CONFIG.ownerUserId,
+      developerTask: { id: "task-1", currentRequesterUserId: "participant-1" },
+    });
+    expect(canUseDeveloperTools(participantJob)).toBe(true);
+    expect(buildGithubDeveloperPolicy(participantJob)).toContain(
+      "They may steer work within the existing task, but cannot authorize a pull request merge or deployment",
+    );
+    expect(
+      buildGithubDeveloperPolicy({
+        ...participantJob,
+        developerTask: {
+          id: "task-1",
+          currentRequesterUserId: ACCESS_CONFIG.ownerUserId,
+        },
+      }),
+    ).toContain("The request starting this turn is from the task owner.");
+  });
+
   test("gives only owner Mac answers the bounded file output", () => {
     const macJob: MacAnswerJob = {
       ...job,

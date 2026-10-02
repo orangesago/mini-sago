@@ -236,6 +236,7 @@ export type OracleAnswerJob = AnswerJobBase & {
     id: string;
     title?: string;
     resumeSessionId?: string;
+    currentRequesterUserId?: string;
   };
 };
 
@@ -349,7 +350,9 @@ function isDeveloperTask(value: unknown) {
     typeof value.id === "string" &&
     (value.title === undefined || typeof value.title === "string") &&
     (value.resumeSessionId === undefined ||
-      typeof value.resumeSessionId === "string")
+      typeof value.resumeSessionId === "string") &&
+    (value.currentRequesterUserId === undefined ||
+      typeof value.currentRequesterUserId === "string")
   );
 }
 
