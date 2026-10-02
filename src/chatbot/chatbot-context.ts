@@ -186,6 +186,7 @@ function contextMessage(
 
   return {
     id: message.id,
+    channelId: message.channel_id,
     role: message.author?.id === botUserId ? "assistant" : "user",
     author: authorName(message),
     ...(aliases.length > 1 ? { authorAliases: aliases } : {}),

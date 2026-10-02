@@ -93,9 +93,18 @@ audio/video files, PDFs, and text files, with these limits:
 - at most 20 MB per attachment and 40 MB total; and
 - at most 100,000 extracted characters per file and 200,000 total.
 
-Downloads accept only Discord HTTPS CDN hosts, stop on cancellation, and are
-deleted after the response. Attachment URLs are stripped from observable tool
-results and sanitized in traces.
+Downloads accept only Discord HTTPS CDN hosts and stop on cancellation. Coding
+task files remain with the retained workspace; other downloads are deleted after
+the response. Attachment URLs are stripped from observable tool results and
+sanitized in traces. After a CDN 403, 404, or 410, the host may fetch a registered
+attachment's original message through the bot API and retry once with the refreshed
+URL for that same attachment. It rejects missing attachments and non-CDN URLs.
+
+Owner-authorized Linux coding jobs also receive `download_attachment`. It accepts
+only a media ID registered to the task's bearer token and returns the original
+file's local path within the task's attachment folder, including attachments
+resolved after the task started. The caller cannot supply a URL or destination.
+Ordinary chat jobs do not receive this file-path tool.
 
 Generated media is request-local and may be returned only by an opaque artifact
 identifier from the job's dedicated output folder. The worker rejects path

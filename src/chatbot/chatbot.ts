@@ -1223,7 +1223,7 @@ export async function handleChatbotMention({
               discordRequest,
             });
       historyDone();
-      const mediaRegistry = new ChatbotMediaRegistry();
+      const mediaRegistry = new ChatbotMediaRegistry(undefined, discordRequest);
       mediaRegistry.registerMessages([requestMessage, ...messages]);
       let contextChannelId = message.channel_id;
       let contextRequestMessageId = message.id;

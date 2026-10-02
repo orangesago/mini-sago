@@ -253,14 +253,18 @@ describe("Codex chatbot runner", () => {
     });
   });
 
-  test("injects the request-local media server only into Linux chat answers", () => {
+  test("injects the request-local media server into Linux chat and coding answers", () => {
     const answerJob = {
       ...job,
       purpose: "answer" as const,
     };
     expect(canUseMediaTools(answerJob, "linux")).toBe(true);
     expect(canUseMediaTools(answerJob, "darwin")).toBe(false);
-    expect(canUseMediaTools(oracleJob(), "linux")).toBe(false);
+    expect(canUseMediaTools(oracleJob(), "linux")).toBe(true);
+    expect(
+      canUseMediaTools({ ...answerJob, executionRoute: "mac" }, "linux"),
+    ).toBe(false);
+    expect(canUseMediaTools(executionRouteJob(), "linux")).toBe(false);
 
     expect(
       mediaMcpConfig(
@@ -268,8 +272,10 @@ describe("Codex chatbot runner", () => {
         "http://sandbox:8080/",
         "https://sago.example/api/chatbot/mcp",
         "token-1",
-        "/usr/local/bin/bun",
-        "/app/worker/src/media/media-mcp.ts",
+        {
+          bunPath: "/usr/local/bin/bun",
+          serverPath: "/app/worker/src/media/media-mcp.ts",
+        },
       ),
     ).toEqual({
       arguments: [
@@ -278,7 +284,7 @@ describe("Codex chatbot runner", () => {
         "--config",
         'mcp_servers.minisago_media.args=["/app/worker/src/media/media-mcp.ts"]',
         "--config",
-        'mcp_servers.minisago_media.env_vars=["MINISAGO_MEDIA_MANIFEST","MINISAGO_SANDBOX_URL","MINISAGO_MCP_URL","MINISAGO_MCP_TOKEN"]',
+        'mcp_servers.minisago_media.env_vars=["MINISAGO_MEDIA_MANIFEST","MINISAGO_SANDBOX_URL","MINISAGO_MCP_URL","MINISAGO_MCP_TOKEN","MINISAGO_MEDIA_DEVELOPER"]',
         "--config",
         "mcp_servers.minisago_media.required=true",
         "--config",
@@ -293,8 +299,14 @@ describe("Codex chatbot runner", () => {
         MINISAGO_SANDBOX_URL: "http://sandbox:8080/",
         MINISAGO_MCP_URL: "https://sago.example/api/chatbot/mcp",
         MINISAGO_MCP_TOKEN: "token-1",
+        MINISAGO_MEDIA_DEVELOPER: "0",
       },
     });
+    expect(
+      mediaMcpConfig("manifest", "sandbox", "mcp", "token", {
+        developerAttachments: true,
+      }).environment.MINISAGO_MEDIA_DEVELOPER,
+    ).toBe("1");
   });
 
   test("configures typed Mac file search with allowlisted roots", () => {
@@ -1035,6 +1047,7 @@ describe("Codex chatbot runner", () => {
     expect(policy).toContain("ordinary pull-request merges");
     expect(policy).toContain("owner has explicitly authorized");
     expect(policy).toContain("dedicated repo-scoped GitHub login");
+    expect(policy).toContain("call download_attachment");
     expect(devPrompt).toContain("github_development_policy");
     expect(devPrompt).toContain("Mark ready only when the owner requests it");
     expect(devPrompt).not.toContain(

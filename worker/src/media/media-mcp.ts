@@ -36,7 +36,7 @@ async function main() {
     { name: "minisago-media", version: "1.0.0" },
     {
       instructions:
-        "Use these request-local tools only when the requester explicitly asks to inspect, compute with, or transform media. Every attachment, member avatar, and generated output is addressed by the same mediaId. Tool outputs may be passed directly into later media or Discord tools. Never invent media IDs. Return at most one useful artifact in the final answer. Prefer a specific media tool when it fits. Otherwise use run_python for general request-local computation. Python includes Pillow, NumPy, OpenCV, scikit-image, rembg with the offline lightweight u2netp model, pypdf, python-docx, openpyxl, and FFmpeg. It has no network, cannot install packages, receives no credentials, and is limited by time, memory, processes, and output size.",
+        "Use these request-local tools only when the requester explicitly asks to inspect, compute with, or transform media, or a coding task needs an attachment downloaded into its workspace. Every attachment, member avatar, and generated output is addressed by the same mediaId. Tool outputs may be passed directly into later media or Discord tools. Never invent media IDs. Return at most one useful artifact in the final answer. Prefer a specific media tool when it fits. Otherwise use run_python for general request-local computation. Python includes Pillow, NumPy, OpenCV, scikit-image, rembg with the offline lightweight u2netp model, pypdf, python-docx, openpyxl, and FFmpeg. It has no network, cannot install packages, receives no credentials, and is limited by time, memory, processes, and output size.",
     },
   );
   const readAnnotations = {
@@ -51,6 +51,28 @@ async function main() {
     idempotentHint: false,
     openWorldHint: false,
   } as const;
+
+  if (process.env.MINISAGO_MEDIA_DEVELOPER === "1") {
+    server.registerTool(
+      "download_attachment",
+      {
+        description:
+          "Download the original Discord attachment into the coding task's attachment folder by mediaId. Use IDs from supplied context or resolve_context, including uploads received during an active task. Returns the local path for viewing or copying into the repository. The host refreshes expired Discord links. No URL or destination path is accepted.",
+        inputSchema: { mediaId: z.string().trim().min(1).max(200) },
+        annotations: readAnnotations,
+      },
+      async ({ mediaId }) => {
+        try {
+          return toolResult({
+            status: "complete",
+            ...(await processor.download(mediaId)),
+          });
+        } catch (error) {
+          return toolResult({ status: "invalid", error: message(error) });
+        }
+      },
+    );
+  }
 
   server.registerTool(
     "inspect_media",

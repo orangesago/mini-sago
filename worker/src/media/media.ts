@@ -206,6 +206,17 @@ export class MediaProcessor {
     });
   }
 
+  async download(mediaId: string) {
+    const attachment = await this.attachment(mediaId);
+    return {
+      mediaId,
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      size: attachment.size,
+      path: attachment.path,
+    };
+  }
+
   private async attachment(id: string) {
     const attachment = this.manifest.attachments.find((item) => item.id === id);
     if (!attachment) {
@@ -220,7 +231,10 @@ export class MediaProcessor {
       ) {
         throw new Error("Media exceeds the processing limit.");
       }
-      const storedFilename = `remote-${id.replace(/[^A-Za-z0-9._-]/gu, "_")}`;
+      const extension = extname(basename(remote.filename))
+        .replace(/[^A-Za-z0-9.]/gu, "")
+        .slice(0, 20);
+      const storedFilename = `remote-${id.replace(/[^A-Za-z0-9._-]/gu, "_")}${extension}`;
       const path = join(this.manifest.root, storedFilename);
       await Bun.write(path, remote.bytes);
       const resolved = {
