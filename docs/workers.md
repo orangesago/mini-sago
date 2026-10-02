@@ -146,6 +146,14 @@ Development turns have no fixed job deadline. They discover the selected reposit
 are available within that repository; publishing releases and mutating workflows
 require an explicit owner request and the GitHub login's corresponding permissions.
 
+Coding tasks can include image evidence in their final answer using Markdown such
+as `![After](</absolute/path/to/screenshot.png>)`. The host uploads local PNG, JPEG,
+GIF, and WebP images as native Discord attachments and preserves their captions.
+Paths must be inside the selected repository or that turn's output folder. Up to
+10 images can be sent with an 8 MB combined limit. Code examples and remote URLs
+do not trigger uploads; missing or rejected images leave the answer intact with
+an attachment failure note.
+
 Run `bash scripts/test-dev-sandbox.sh` to check the pinned Linux runtime without
 credentials or a model call. On AppArmor hosts, first load the existing
 production profile with `sudo apparmor_parser -r scripts/test-fixtures/worker-security/minisago-worker.apparmor`.

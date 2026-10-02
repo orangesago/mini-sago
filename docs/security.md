@@ -127,6 +127,13 @@ Mac file requests are owner-only and read-only. Search is limited to configured
 roots, and the host revalidates the exact path before uploading at most one
 regular file of 8 MB or less. Symlinks and paths outside the roots are rejected.
 
+Coding evidence uploads are selected by local image references in the final
+answer, excluding code examples. The worker resolves each path and admits only
+regular PNG, JPEG, GIF, or WebP files inside the selected repository or current
+turn's output folder, with matching image signatures. Paths and symlinks that
+escape those roots are rejected. The worker and host both enforce at most 10
+attachments and 8 MB combined; remote image URLs are never fetched for upload.
+
 ## Owner development and GitHub
 
 Development jobs receive one selected disposable repository checkout. GitHub

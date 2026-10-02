@@ -150,6 +150,7 @@ describe("Discord chatbot", () => {
       path: string;
       method?: string;
       body: unknown;
+      formData?: FormData;
     }> = [];
     let codingMessageCount = 0;
     let supplementaryContent = "Add the stamp to the last page too.";
@@ -226,7 +227,10 @@ describe("Discord chatbot", () => {
           discordCalls.push({
             path,
             method: options?.method,
-            body: options?.body,
+            body: options?.formData
+              ? JSON.parse(options.formData.get("payload_json") as string)
+              : options?.body,
+            formData: options?.formData,
           });
           if (path.startsWith("/channels/coding-thread/messages?"))
             return [supplement()] as never;
@@ -412,6 +416,12 @@ describe("Discord chatbot", () => {
           jobId: answerJob.job.id,
           ok: true,
           content: "done",
+          files: ["before.png", "after.png"].map((filename) => ({
+            filename,
+            contentType: "image/png",
+            size: 5,
+            data: Buffer.from("image").toString("base64"),
+          })),
         }),
       );
       await waitFor(() =>
@@ -421,6 +431,20 @@ describe("Discord chatbot", () => {
             (body as { content?: string })?.content === "done",
         ),
       );
+      const evidenceUpload = discordCalls.find(
+        ({ body }) => (body as { content?: string })?.content === "done",
+      )!.formData!;
+      expect(JSON.parse(evidenceUpload.get("payload_json") as string)).toEqual({
+        content: "done",
+        allowed_mentions: { parse: [] },
+      });
+      for (const [index, filename] of ["before.png", "after.png"].entries()) {
+        const image = evidenceUpload.get(`files[${index}]`) as File;
+        expect(image.name).toBe(filename);
+        expect(image.type).toBe("image/png");
+        expect(await image.text()).toBe("image");
+      }
+      expect(discordCalls.filter(({ formData }) => formData).length).toBe(1);
       expect(
         discordCalls.find(
           ({ path }) => path === "/channels/coding-thread/messages",
@@ -854,15 +878,29 @@ describe("Discord chatbot", () => {
           type: "result",
           jobId: attachmentJob.job.id,
           ok: true,
-          content: "stamp received",
+          content: "",
+          files: [
+            {
+              filename: "stamp.png",
+              contentType: "image/png",
+              size: 5,
+              data: Buffer.from("stamp").toString("base64"),
+            },
+          ],
         }),
       );
       await waitFor(() =>
         discordCalls.find(
-          ({ body }) =>
-            (body as { content?: string })?.content === "stamp received",
+          ({ formData }) =>
+            (formData?.get("files[0]") as File | undefined)?.name ===
+            "stamp.png",
         ),
       );
+      const imageOnly = discordCalls.find(
+        ({ formData }) =>
+          (formData?.get("files[0]") as File | undefined)?.name === "stamp.png",
+      )!;
+      expect(imageOnly.body).toEqual({ allowed_mentions: { parse: [] } });
     } finally {
       await contextClient?.close();
       mcpServer.stop(true);

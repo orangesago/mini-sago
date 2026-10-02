@@ -4,6 +4,7 @@ import type { ServerWebSocket } from "bun";
 import { MacAgentBridge, type MacAgentSocketData } from "./bridge";
 import {
   CHATBOT_PROTOCOL_VERSION,
+  CHATBOT_OUTGOING_FILE_LIMITS,
   type ChatbotJob,
 } from "../../contracts/worker-contract";
 
@@ -238,6 +239,64 @@ describe("Mac agent bridge", () => {
       ],
     });
     expect(bridge.getStatus()).toBe("available");
+  });
+
+  test("accepts multiple images but rejects excessive count and combined bytes", async () => {
+    useWorker();
+    const bridge = new MacAgentBridge();
+    const { socket } = connectWorker(bridge);
+    const job: ChatbotJob = {
+      id: "images",
+      requesterUserId: "test-user",
+      purpose: "answer",
+      executionRoute: "chat",
+      mcpAccessToken: "test-token",
+      channelId: "channel-1",
+      requestMessageId: "message-1",
+      request: "Show the screenshots",
+      messages: [],
+    };
+    const file = {
+      filename: "after.png",
+      contentType: "image/png",
+      size: 5,
+      data: Buffer.from("image").toString("base64"),
+    };
+    const largeBytes = Buffer.alloc(CHATBOT_OUTGOING_FILE_LIMITS.bytes / 2 + 1);
+    const largeFile = {
+      ...file,
+      size: largeBytes.length,
+      data: largeBytes.toString("base64"),
+    };
+    for (const [index, files] of [
+      [file, file],
+      Array(11).fill(file),
+      [largeFile, largeFile],
+    ].entries()) {
+      const dispatch = bridge.dispatch({ ...job, id: `images-${index}` });
+      if (dispatch.status !== "accepted")
+        throw new Error("Expected accepted dispatch");
+      bridge.message(
+        socket,
+        JSON.stringify({
+          type: "result",
+          jobId: `images-${index}`,
+          ok: true,
+          content: "Done",
+          files,
+        }),
+      );
+      const result = await dispatch.result;
+      if (index === 0)
+        expect(result).toEqual({ ok: true, content: "Done", files });
+      else
+        expect(result).toEqual({
+          ok: false,
+          error: "Worker returned invalid files.",
+          failureKind: "internal",
+        });
+    }
+    bridge.close(socket);
   });
 
   test("reserves the bridge across routing and answering jobs", async () => {

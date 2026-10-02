@@ -1,5 +1,9 @@
 export const CHATBOT_PROTOCOL_VERSION = 36;
 export const CHATBOT_JOB_TIMEOUT_MS = 5 * 60_000;
+export const CHATBOT_OUTGOING_FILE_LIMITS = {
+  count: 10,
+  bytes: 8 * 1024 * 1024,
+} as const;
 
 export type ChatbotWorkerCapability = "chat" | "dev" | "mac";
 export type ChatbotFailureKind = "unavailable" | "timeout" | "internal";
