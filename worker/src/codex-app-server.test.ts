@@ -80,10 +80,16 @@ describe("Codex App Server manager", () => {
     expect(await result).toBe("Finished after steering.");
     expect(manager.status()).toEqual({ ok: true, sessions: 1, active: 0 });
     expect(progress).toContainEqual({
-      phase: "exploring",
+      phase: "reviewing",
       summary: "Inspecting the task.",
-      kind: "action",
+      kind: "trace",
     });
+    expect(JSON.stringify(progress)).not.toContain(
+      "Managing file modifications",
+    );
+    expect(JSON.stringify(progress)).not.toContain(
+      "internal implementation details",
+    );
     expect(progress).toContainEqual({
       phase: "reviewing",
       summary: "Applying the new direction.",
@@ -121,6 +127,35 @@ describe("Codex App Server manager", () => {
     manager.close();
   });
 
+  test("keeps recoverable command failures in diagnostics instead of public progress", async () => {
+    const manager = new CodexAppServerManager();
+    const progress: ChatbotTaskProgress[] = [];
+    const calls: unknown[] = [];
+    try {
+      await manager.run({
+        ...runOptions((item) => progress.push(item), "job-command-failure"),
+        ephemeral: true,
+        outputSchema: { type: "object" },
+        failOnSandboxError: true,
+        environment: {
+          ...process.env,
+          MINISAGO_TEST_COMMAND_FAILURE: "1",
+        } as Record<string, string>,
+        onMcpToolCall: (call) => calls.push(call),
+      });
+      expect(calls).toContainEqual({
+        name: "command_execution",
+        arguments: { exitCode: 1 },
+        status: "failed",
+      });
+      expect(
+        progress.some((item) => item.summary.includes("Command failed")),
+      ).toBe(false);
+    } finally {
+      manager.close();
+    }
+  });
+
   test("interrupts without discarding the persistent Codex thread", async () => {
     const manager = new CodexAppServerManager();
     const firstProgress: ChatbotTaskProgress[] = [];
@@ -155,8 +190,9 @@ describe("Codex App Server manager", () => {
 
 test("restarts a task runner with fresh environment and replaces resumed thread configuration", async () => {
   const manager = new CodexAppServerManager();
+  const progress: ChatbotTaskProgress[] = [];
   const options = {
-    ...runOptions(() => {}),
+    ...runOptions((item) => progress.push(item)),
     ephemeral: true,
     outputSchema: { type: "object" },
     threadConfig: { default_permissions: "new-profile" },
@@ -210,6 +246,11 @@ test("restarts a task runner with fresh environment and replaces resumed thread 
         },
       }),
     ).rejects.toThrow("Coding sandbox failed");
+    expect(progress).toContainEqual({
+      phase: "testing",
+      kind: "trace",
+      summary: "The coding environment is blocked by a sandbox failure.",
+    });
   } finally {
     manager.close();
   }

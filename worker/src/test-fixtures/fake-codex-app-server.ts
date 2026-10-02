@@ -55,11 +55,41 @@ async function handle(line: string) {
         item: {
           id: "reasoning-1",
           type: "reasoning",
-          summary: [{ text: "Inspecting the task." }],
+          summary: [
+            {
+              text: "Managing file modifications\n\nI need to consider internal implementation details.",
+            },
+          ],
           content: [],
         },
       },
     });
+    send({
+      method: "item/completed",
+      params: {
+        threadId: "thread-native",
+        turnId: "turn-native",
+        item: {
+          type: "agentMessage",
+          phase: "commentary",
+          text: "Inspecting the task.",
+        },
+      },
+    });
+    if (process.env.MINISAGO_TEST_COMMAND_FAILURE)
+      send({
+        method: "item/completed",
+        params: {
+          threadId: "thread-native",
+          turnId: "turn-native",
+          item: {
+            type: "commandExecution",
+            status: "completed",
+            exitCode: 1,
+            aggregatedOutput: "No matches found.",
+          },
+        },
+      });
     if (message.params?.outputSchema && process.env.MINISAGO_TEST_RUNTIME) {
       if (process.env.MINISAGO_TEST_SANDBOX_FAILURE)
         send({
