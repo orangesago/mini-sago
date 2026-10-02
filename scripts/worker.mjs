@@ -12,6 +12,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveCodexPath } from "../worker/src/codex-path.ts";
 
 const action = process.argv[2];
 const supportedActions = new Set(["install", "status", "uninstall"]);
@@ -139,6 +140,8 @@ async function install() {
     process.exit(1);
   }
 
+  const codexPath = await resolveCodexPath();
+
   await mkdir(binDirectory, { recursive: true, mode: 0o700 });
   await mkdir(logsDirectory, { recursive: true, mode: 0o700 });
   await mkdir(dirname(launchAgentFile), { recursive: true });
@@ -212,11 +215,7 @@ async function install() {
       process.env.MINISAGO_GITHUB_WORKTREE_ROOT?.trim() ||
         join(userHome, "Projects", "worktrees"),
     ),
-    envLine(
-      "MINISAGO_CODEX_PATH",
-      process.env.MINISAGO_CODEX_PATH?.trim() ||
-        "/Applications/ChatGPT.app/Contents/Resources/codex",
-    ),
+    envLine("MINISAGO_CODEX_PATH", codexPath),
     envLine("MINISAGO_SESSION_MONITOR_PATH", sessionMonitor),
     envLine(
       "MINISAGO_TRACE_DATABASE_PATH",

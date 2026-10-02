@@ -1,7 +1,7 @@
-import { access } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { isIP } from "node:net";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { resolveCodexPath } from "./codex-path";
 
 import {
   getChatbotAccessConfig,
@@ -32,7 +32,6 @@ export type MacAgentConfig = {
   workerId: string;
 };
 
-const bundledCodexPath = "/Applications/ChatGPT.app/Contents/Resources/codex";
 const defaultApplicationSupport =
   process.platform === "darwin"
     ? join(homedir(), "Library", "Application Support", "MiniSago")
@@ -76,32 +75,6 @@ export function configuredSkillbookRepository(
   configured = process.env.MINISAGO_SKILLBOOK_REPOSITORY,
 ) {
   return configured?.trim() || (headless ? "sago-cream/skills" : undefined);
-}
-
-async function isExecutable(path: string) {
-  try {
-    await access(path, 1);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolveCodexPath() {
-  const configured = process.env.MINISAGO_CODEX_PATH?.trim();
-  const candidates = [configured, bundledCodexPath, Bun.which("codex")].filter(
-    (candidate): candidate is string => Boolean(candidate),
-  );
-
-  for (const candidate of candidates) {
-    if (await isExecutable(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error(
-    "No working Codex executable was found. Set MINISAGO_CODEX_PATH.",
-  );
 }
 
 export async function discoverGitHubRepositories(githubConfigDir: string) {
