@@ -127,6 +127,13 @@ not automatically deleted. The existing thread registry is still in memory and
 expires after three idle days, so restarting the core requires manual task
 recovery. Preserve unfinished work before manually retiring its workspace.
 
+Human participants in an owner-created coding thread can steer its active turn
+or continue its saved task. Each follow-up includes fresh nearby thread messages
+and attachment references, and `resolve_context` reads live history from that
+thread. Bot and webhook messages do not steer coding tasks. Participant direction
+stays within the existing task; only the owner can authorize a PR merge or
+deployment. After a PR merge, continuing the task requires addressing the bot.
+
 Before starting a coding turn, the worker checks Git metadata writes, scratch
 storage and repository access through the actual Codex sandbox. A failed check
 or sandbox initialization error fails the job and remains visible in the thread

@@ -63,7 +63,10 @@ describe("chatbot job protocol", () => {
         executionRoute: "oracle",
         repository: "sago-cream/mini-sago",
         mcpAccessToken: "token",
-        developerTask: { id: "task-1" },
+        developerTask: {
+          id: "task-1",
+          currentRequesterUserId: "participant-1",
+        },
       })?.purpose,
     ).toBe("answer");
   });
@@ -149,6 +152,16 @@ describe("chatbot job protocol", () => {
         repository: "sago-cream/mini-sago",
         mcpAccessToken: "token",
         developerTask: {},
+      }),
+    ).toBeNull();
+    expect(
+      parseChatbotJob({
+        ...common,
+        purpose: "answer",
+        executionRoute: "oracle",
+        repository: "sago-cream/mini-sago",
+        mcpAccessToken: "token",
+        developerTask: { id: "task-1", currentRequesterUserId: 42 },
       }),
     ).toBeNull();
   });
