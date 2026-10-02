@@ -486,11 +486,11 @@ class CodexAppServerSession {
           arguments: { exitCode: item.exitCode },
           status: "failed",
         });
-      if (active.failOnSandboxError)
+      if (active.sandboxError)
         active.onProgress?.({
           phase: "testing",
           kind: "trace",
-          summary: `Command failed (exit ${String(item.exitCode)}).${active.sandboxError ? " The coding environment is blocked." : " Check the command output before continuing."}`,
+          summary: "The coding environment is blocked by a sandbox failure.",
         });
     }
     if (isSuccessfulPullRequestMerge(item)) {
@@ -502,14 +502,6 @@ class CodexAppServerSession {
       return;
     }
     if (item.type === "reasoning") {
-      const summary = text(item.summary).trim();
-      if (summary) {
-        active.onProgress?.({
-          phase: "exploring",
-          summary: summary.slice(0, 2_000),
-          kind: "action",
-        });
-      }
       return;
     }
     if (item.type === "agentMessage") {

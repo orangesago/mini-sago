@@ -175,11 +175,7 @@ describe("Codex chatbot runner", () => {
           item: { type: "reasoning", text: "Inspecting the bridge." },
         }),
       ),
-    ).toEqual({
-      phase: "exploring",
-      summary: "Inspecting the bridge.",
-      kind: "action",
-    });
+    ).toBeUndefined();
     expect(
       progressForCodexEvent(
         JSON.stringify({

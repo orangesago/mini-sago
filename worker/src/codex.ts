@@ -155,14 +155,13 @@ export function progressForCodexEvent(
     }
     if (
       event.type === "item.completed" &&
-      (event.item?.type === "reasoning" ||
-        event.item?.type === "agent_message") &&
+      event.item?.type === "agent_message" &&
       event.item.text?.trim()
     ) {
       return {
-        phase: event.item.type === "reasoning" ? "exploring" : "reviewing",
+        phase: "reviewing",
         summary: event.item.text.trim().slice(0, 2_000),
-        kind: event.item.type === "reasoning" ? "action" : "trace",
+        kind: "trace",
       };
     }
     if (
