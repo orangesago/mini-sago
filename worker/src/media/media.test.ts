@@ -58,6 +58,17 @@ async function fixture(
 }
 
 describe("request-local media processor", () => {
+  test("returns the original prepared attachment without transforming it", async () => {
+    const { processor, commands } = await fixture();
+    const original = await processor.download("attachment-1");
+    expect(await Bun.file(original.path).text()).toBe("image");
+    expect(original).toMatchObject({
+      mediaId: "attachment-1",
+      filename: "source.png",
+      size: 5,
+    });
+    expect(commands).toHaveLength(0);
+  });
   test("returns bounded probe metadata without tags or arbitrary fields", async () => {
     const { processor } = await fixture({
       format: {

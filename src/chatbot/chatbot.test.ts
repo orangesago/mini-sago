@@ -2209,6 +2209,7 @@ describe("Discord chatbot", () => {
       }),
     ).toEqual({
       id: "message-2",
+      channelId: "channel-1",
       role: "user",
       author: "Hsi",
       timestamp: "2026-07-20T11:00:00.000Z",
@@ -2228,6 +2229,7 @@ describe("Discord chatbot", () => {
       ],
       referencedMessage: {
         id: "message-1",
+        channelId: "channel-1",
         role: "user",
         author: "Daniel",
         timestamp: "2026-07-18T11:00:00.000Z",

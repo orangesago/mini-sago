@@ -4,16 +4,19 @@ import type {
   ChatbotMediaRef,
   ChatbotMessage,
 } from "../../contracts/worker-contract";
+import type { DiscordRequest } from "../discord/api/request";
+import type { DiscordMessage } from "./chatbot-context";
 
 const MAX_INPUT_BYTES = 20 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const ALLOWED_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 const MEDIA_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u;
 
-type MediaAsset = ChatbotMediaRef & { authorize?: () => Promise<void> } & (
-    | { url: string; bytes?: never }
-    | { bytes: Uint8Array; url?: never }
-  );
+type AttachmentSource = { channelId: string; messageId: string };
+type MediaAsset = ChatbotMediaRef & {
+  authorize?: () => Promise<void>;
+  source?: AttachmentSource;
+} & ({ url: string; bytes?: never } | { bytes: Uint8Array; url?: never });
 type MediaFetch = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -64,7 +67,10 @@ export async function readBoundedMediaBytes(
 export class ChatbotMediaRegistry {
   private readonly assets = new Map<string, MediaAsset>();
 
-  constructor(private readonly fetcher: MediaFetch = fetch) {}
+  constructor(
+    private readonly fetcher: MediaFetch = fetch,
+    private readonly discordRequest?: DiscordRequest,
+  ) {}
 
   registerUrl(input: {
     mediaId?: string;
@@ -72,6 +78,7 @@ export class ChatbotMediaRegistry {
     contentType?: string;
     size?: number;
     url: string;
+    source?: AttachmentSource;
   }): ChatbotMediaRef {
     const mediaId = validatedId(input.mediaId ?? `media-${randomUUID()}`);
     const asset: MediaAsset = {
@@ -80,6 +87,7 @@ export class ChatbotMediaRegistry {
       ...(input.contentType ? { contentType: input.contentType } : {}),
       ...(input.size !== undefined ? { size: input.size } : {}),
       url: validateUrl(input.url),
+      source: input.source,
     };
     this.assets.set(mediaId, asset);
     return this.reference(asset);
@@ -94,6 +102,11 @@ export class ChatbotMediaRegistry {
           contentType: attachment.contentType,
           size: attachment.size,
           url: attachment.url,
+          ...(message.channelId
+            ? {
+                source: { channelId: message.channelId, messageId: message.id },
+              }
+            : {}),
         });
       }
       if (message.referencedMessage) visit(message.referencedMessage);
@@ -136,10 +149,37 @@ export class ChatbotMediaRegistry {
     await asset.authorize?.();
     if (asset.bytes) return { ...this.reference(asset), bytes: asset.bytes };
 
-    const response = await fetcher(asset.url, {
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (response.url) validateUrl(response.url);
+    const signal = AbortSignal.timeout(20_000);
+    const download = async () => {
+      const response = await fetcher(asset.url!, { signal });
+      if (response.url) validateUrl(response.url);
+      return response;
+    };
+    let response = await download();
+    if (
+      [403, 404, 410].includes(response.status) &&
+      asset.source &&
+      this.discordRequest
+    ) {
+      await response.body?.cancel();
+      const { channelId, messageId } = asset.source;
+      const message = await this.discordRequest<DiscordMessage>(
+        `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+      );
+      const attachment = message.attachments?.find(
+        (item) => item.id === asset.mediaId,
+      );
+      if (
+        message.id !== messageId ||
+        message.channel_id !== channelId ||
+        !attachment
+      ) {
+        throw new Error("Media is unavailable for this request.");
+      }
+      asset.url = validateUrl(attachment.url);
+      signal.throwIfAborted();
+      response = await download();
+    }
     if (!response.ok) throw new Error("Discord could not download the media.");
     return {
       ...this.reference(asset),
