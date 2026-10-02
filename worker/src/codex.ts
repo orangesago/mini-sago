@@ -20,7 +20,6 @@ import type {
   MacAnswerJob,
   OracleAnswerJob,
 } from "../../contracts/worker-contract";
-import { CHATBOT_DEV_JOB_TIMEOUT_MS } from "../../contracts/worker-contract";
 import { prepareAttachments } from "./media/attachments";
 import { httpMediaClient } from "./media/media-client";
 import { prepareDeveloperWorkspace } from "./developer-workspace";
@@ -990,10 +989,9 @@ export async function runCodexJob(job: CodexJob, options: CodexRunOptions) {
   const hasMacFileAccess = canUseMacFiles(job, options.chatbotAccess);
   const hasMediaTools = canUseMediaTools(job);
   const timeoutController = new AbortController();
-  const timeout = setTimeout(
-    () => timeoutController.abort(),
-    hasDeveloperAccess ? CHATBOT_DEV_JOB_TIMEOUT_MS : LOCAL_CHAT_TIMEOUT_MS,
-  );
+  const timeout = hasDeveloperAccess
+    ? undefined
+    : setTimeout(() => timeoutController.abort(), LOCAL_CHAT_TIMEOUT_MS);
   const abort = () => timeoutController.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) timeoutController.abort();

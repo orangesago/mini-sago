@@ -139,7 +139,7 @@ storage and repository access through the actual Codex sandbox. A failed check
 or sandbox initialization error fails the job and remains visible in the thread
 and worker trace. Finishing a turn does not certify PR or CI completion.
 
-Development turns may run for 30 minutes. They discover the selected repository's
+Development turns have no fixed job deadline. They discover the selected repository's
 `AGENTS.md` and `AGENTS.override.md` guidance. Release and GitHub workflow commands
 are available within that repository; publishing releases and mutating workflows
 require an explicit owner request and the GitHub login's corresponding permissions.
