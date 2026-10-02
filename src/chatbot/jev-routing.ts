@@ -44,7 +44,7 @@ export function jevRequest(job: ExecutionRouteJob) {
           chat: "Conversation, Discord history, public web research, drafting, or host capabilities—even owner-only tools.",
           mac: "Explicitly needs files, apps, browser state, or hardware on Hsi's Mac.",
           oracle:
-            "Needs repository/developer tools: inspect code, review PRs, debug, test, build, change bot implementation, or deploy.",
+            "Needs repository/developer tools: inspect code, review PRs, debug, test, build, change bot implementation, manage releases or GitHub workflows, or deploy.",
         },
       },
     },

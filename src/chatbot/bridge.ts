@@ -637,9 +637,10 @@ export class MacAgentBridge {
     }
 
     const result = new Promise<MacAgentJobResult>((resolve) => {
+      // Give the worker's execution deadline time to deliver its result.
       const timeoutMs =
         job.executionRoute === "oracle" && job.purpose === "answer"
-          ? CHATBOT_DEV_JOB_TIMEOUT_MS
+          ? CHATBOT_DEV_JOB_TIMEOUT_MS + 60_000
           : CHATBOT_JOB_TIMEOUT_MS;
       const timer = setTimeout(() => {
         const pendingJob = this.pendingJobs.get(job.id);

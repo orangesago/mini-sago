@@ -143,14 +143,15 @@ repository work without a second inferred authorization scope:
 - the prepared feature branch may be pushed and used to open a draft PR;
 - an explicit owner request may merge a pull request without administrative
   bypass; and
-- PR edits, comments, reviews, ready-for-review and Actions reruns are allowed
-  within the owner's requested work; protected-branch and force pushes are denied.
+- PR edits, comments, reviews, ready-for-review, release management, workflow
+  management and Actions reruns are allowed within the owner's requested work;
+  protected-branch and force pushes are denied.
 
 GitHub rulesets must independently block direct and force pushes to protected
 branches. The credential should have repository contents, issues, and pull
-request access plus read access to checks. Actions reruns require Actions write
-access. Never grant
-administration, secrets, environments, deployments, organization, or unrelated
+request access plus read access to checks. Release mutations require Contents
+write access; workflow mutations and Actions reruns require Actions write access.
+Never grant administration, secrets, environments, deployments, organization, or unrelated
 repository access. Credential and ruleset setup is tracked in
 [issue #12](https://github.com/sago-cream/mini-sago/issues/12).
 

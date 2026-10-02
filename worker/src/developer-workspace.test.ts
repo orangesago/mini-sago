@@ -320,7 +320,7 @@ describe("developer workspace", () => {
     await resumed.cleanup();
   });
 
-  test("allows bounded issue, draft PR, and merge mutations", async () => {
+  test("allows issue, PR, release, and workflow operations", async () => {
     const workspace = await prepareDeveloperWorkspace(
       job(),
       await options(),
@@ -344,6 +344,18 @@ describe("developer workspace", () => {
       ["pr", "comment", "12"],
       ["pr", "review", "12", "--comment"],
       ["run", "rerun", "123", "--failed"],
+      ["release", "list"],
+      ["release", "view", "v1.0.0"],
+      ["release", "download", "v1.0.0"],
+      ["release", "create", "v1.0.0", "--draft"],
+      ["release", "edit", "v1.0.0", "--draft=false"],
+      ["release", "upload", "v1.0.0", "build.zip"],
+      ["release", "delete", "v1.0.0", "--yes"],
+      ["workflow", "list"],
+      ["workflow", "view", "deploy.yml"],
+      ["workflow", "run", "deploy.yml", "--ref", "main"],
+      ["workflow", "enable", "deploy.yml"],
+      ["workflow", "disable", "deploy.yml"],
     ]) {
       expect(
         await Bun.spawn([gh, ...args], {
@@ -381,6 +393,18 @@ describe("developer workspace", () => {
       stderr: "ignore",
     });
     expect(await assignedAdmin.exited).toBe(77);
+    for (const args of [
+      ["repo", "delete"],
+      ["secret", "set", "TOKEN"],
+    ]) {
+      expect(
+        await Bun.spawn([gh, ...args], {
+          env: environment,
+          stdout: "ignore",
+          stderr: "ignore",
+        }).exited,
+      ).toBe(77);
+    }
   });
 
   test("rejects a repository outside the worker advertisement", async () => {

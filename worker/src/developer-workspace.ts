@@ -42,7 +42,7 @@ case "$command:$subcommand" in
       esac
     done
     ;;
-  issue:create|issue:edit|issue:close|issue:reopen|issue:comment|pr:edit|pr:ready|pr:review|pr:comment|run:rerun)
+  issue:create|issue:edit|issue:close|issue:reopen|issue:comment|pr:edit|pr:ready|pr:review|pr:comment|run:rerun|release:*|workflow:*)
     ;;
   pr:create)
     draft=false
@@ -58,10 +58,10 @@ case "$command:$subcommand" in
       esac
     done
     ;;
-  repo:create|repo:delete|repo:archive|repo:edit|repo:fork|release:*|workflow:run|run:cancel|run:delete|secret:*|variable:*)
+  repo:create|repo:delete|repo:archive|repo:edit|repo:fork|run:cancel|run:delete|secret:*|variable:*)
     deny
     ;;
-  auth:status|repo:view|repo:clone|repo:list|pr:view|pr:list|pr:checks|pr:diff|pr:status|issue:view|issue:list|issue:status|run:view|run:list|run:watch|workflow:view|workflow:list|release:view|release:list|release:download|search:*|status:*|help:*|version:*)
+  auth:status|repo:view|repo:clone|repo:list|pr:view|pr:list|pr:checks|pr:diff|pr:status|issue:view|issue:list|issue:status|run:view|run:list|run:watch|search:*|status:*|help:*|version:*)
     ;;
   *)
     deny

@@ -73,7 +73,8 @@ routing, evidence retrieval, and answering unless its required profile changes.
 Community and owner chat use GPT-6.1 Sol with medium reasoning. The owner router,
 voice chat, and social actions use GPT-6 Luna with low reasoning; selected
 development work uses GPT-6.1 Sol with xhigh reasoning. Ordinary stages have a
-two-minute timeout, while final owner development answers may run for 15 minutes.
+two-minute timeout, while final owner development answers may run for 30 minutes.
+The bridge allows one additional minute for the worker to return its result.
 
 ## Context and MCP
 
@@ -148,10 +149,11 @@ Workers compile every model call into three explicit authority layers:
    tool results are labeled as untrusted context.
 
 Codex receives the task as its prompt and the context over standard input.
-Implicit repository instruction discovery is disabled for worker jobs, so files
-such as `AGENTS.md` remain repository data unless the owner explicitly asks to
-work with them. Mechanical permissions, MCP session binding, command wrappers,
-and output schemas continue to enforce capabilities outside the prompt.
+Development jobs discover repository guidance from `AGENTS.md` and
+`AGENTS.override.md` with a 32 KiB combined limit. Other worker jobs disable
+implicit repository instruction discovery. Mechanical permissions, MCP session
+binding, command wrappers, and output schemas continue to enforce capabilities
+outside the prompt.
 
 Initial messages, each message, extracted attachment text, and resolved MCP
 context have deterministic character budgets in

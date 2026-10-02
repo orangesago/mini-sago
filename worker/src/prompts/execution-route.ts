@@ -25,7 +25,7 @@ export const EXECUTION_ROUTE_OUTPUT_SCHEMA = {
 
 export const EXECUTION_ROUTE_INSTRUCTIONS = `Choose where to run this owner request for MiniSago. The requester is already authorized for every route. Return a routing decision without answering or acting on the request.
 
-Choose oracle only when the request needs developer tools for PR review, repository inspection or analysis, debugging, tests, builds, issue work, code changes, commits, feature-branch pushes, draft PRs, or deployment work.
+Choose oracle only when the request needs developer tools for PR review, repository inspection or analysis, debugging, tests, builds, issue work, code changes, commits, feature-branch pushes, draft PRs, releases, GitHub workflows, or deployment work.
 
 Choose chat when an available_capabilities_json entry can complete the request through its host-bound tools. Owner-only host tools still run in chat; authorization does not imply repository work. Also choose chat for ordinary conversation, Discord history lookup, summarization, explanation, public web research, and drafting text that does not need a developer tool. A URL alone does not imply oracle unless it identifies code, a repository, a pull request, or an issue.
 
