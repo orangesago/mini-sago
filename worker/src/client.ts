@@ -393,13 +393,19 @@ export class MacAgentClient {
           job.channelId,
           job.requestMessageId,
         );
+        const developerTask = this.traceStore.preservedDeveloperTask(
+          job.channelId,
+        );
         this.send({
           type: "result",
           jobId: job.id,
           ok: true,
-          content: JSON.stringify(
-            trace ? { status: "complete", trace } : { status: "not_found" },
-          ),
+          content: JSON.stringify({
+            ...(trace
+              ? { status: "complete", trace }
+              : { status: "not_found" }),
+            ...(developerTask ? { developerTask } : {}),
+          }),
         });
       } catch {
         this.send({
@@ -444,6 +450,11 @@ export class MacAgentClient {
             this.traceStore.recordPrompt(job.id, prompt),
           onProgress: (progress) => {
             phase = progress.phase;
+            if (job.developerTask && progress.sessionId)
+              this.traceStore.recordDeveloperSession(
+                job.id,
+                progress.sessionId,
+              );
             this.send({ type: "progress", jobId: job.id, progress });
           },
           onReplyDelta: (delta) => {

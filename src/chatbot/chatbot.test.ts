@@ -22,6 +22,7 @@ import {
   executeChatbotAnswerDecision,
   executionRouteOrChat,
   developerThreadName,
+  createDeveloperThread,
   formatDiscordAnswer,
   formatDiscordAnswers,
   getNearbyHumanMessages,
@@ -235,6 +236,7 @@ describe("Discord chatbot", () => {
           if (path.startsWith("/channels/coding-thread/messages?"))
             return [supplement()] as never;
           if (path.includes("?around=")) return [] as never;
+          if (path === "/channels/channel-1") return { type: 0 } as never;
           if (path.endsWith("/threads"))
             return { id: "coding-thread" } as never;
           if (path === "/channels/coding-thread/messages") {
@@ -913,6 +915,174 @@ describe("Discord chatbot", () => {
       else process.env.MINISAGO_MAC_BRIDGE_SECRET = oldMacSecret;
     }
   });
+
+  test.each([10, 11, 12])(
+    "reuses an existing Discord thread of type %i",
+    async (type) => {
+      const paths: string[] = [];
+      const threadId = await createDeveloperThread(
+        {
+          id: "retry",
+          channel_id: "existing-thread",
+          timestamp: "2026-10-02T18:11:00.000Z",
+        },
+        "Continue coding",
+        (async (path) => {
+          paths.push(path);
+          return { type };
+        }) as DiscordRequest,
+      );
+      expect(threadId).toBe("existing-thread");
+      expect(paths).toEqual(["/channels/existing-thread"]);
+    },
+  );
+
+  test.each(["owner", "no-session", "other-owner", "other-repository"])(
+    "recovers only a matching coding task after restart (%s)",
+    async (scenario) => {
+      const oldSecret = process.env.MINISAGO_WORKER_BRIDGE_SECRET;
+      const secret = "recover-coding-thread-secret-at-least-32-bytes";
+      process.env.MINISAGO_WORKER_BRIDGE_SECRET = secret;
+      const sent: string[] = [];
+      const socket = {
+        data: { authenticated: false },
+        send: (value: string) => sent.push(value),
+        close: () => undefined,
+      } as unknown as ServerWebSocket<MacAgentSocketData>;
+      const threadId = `recovered-thread-${scenario}`;
+      const paths: string[] = [];
+      const preservedTask = {
+        id: "preserved-task",
+        requesterUserId:
+          scenario === "other-owner"
+            ? "another-owner"
+            : ACCESS_CONFIG.ownerUserId,
+        repository:
+          scenario === "other-repository"
+            ? "sago-cream/other-repo"
+            : "sago-cream/mini-sago",
+        request: "Finish the original change and publish a draft PR",
+        title: "Original coding task",
+        ...(scenario === "no-session"
+          ? {}
+          : { resumeSessionId: "preserved-codex-session" }),
+      };
+      try {
+        macAgentBridge.open(socket);
+        macAgentBridge.message(
+          socket,
+          JSON.stringify({
+            type: "authenticate",
+            protocolVersion: CHATBOT_PROTOCOL_VERSION,
+            secret,
+            workerId: "oracle",
+            repositories: ["sago-cream/mini-sago"],
+          }),
+        );
+        macAgentBridge.message(
+          socket,
+          JSON.stringify({
+            type: "availability",
+            available: true,
+            capacity: 1,
+          }),
+        );
+        const handled = handleChatbotMention({
+          message: {
+            id: `retry-${scenario}`,
+            channel_id: threadId,
+            timestamp: "2026-10-02T18:11:00.000Z",
+            guild_id: "917436845187563610",
+            content: `<@${BOT_ID}> try again`,
+            author: { id: ACCESS_CONFIG.ownerUserId },
+            mentions: [{ id: BOT_ID }],
+          },
+          botUserId: BOT_ID,
+          accessConfig: ACCESS_CONFIG,
+          executionOptions: {
+            lazyPreviousTrace: true,
+            routeRequest: async () =>
+              JSON.stringify({
+                route: "oracle",
+                repository: "sago-cream/mini-sago",
+              }),
+          },
+          discordRequest: (async (path, options) => {
+            paths.push(path);
+            if (path === `/channels/${threadId}`) return { type: 11 };
+            if (path.endsWith("/threads"))
+              throw new Error("Discord forbids nested threads");
+            if (options?.method === "POST") return { id: "reply" };
+            return [];
+          }) as DiscordRequest,
+        });
+        const traceJob = await waitFor(() =>
+          sent
+            .map((value) => JSON.parse(value))
+            .find(
+              (value) =>
+                value.type === "job" && value.job.purpose === "trace_lookup",
+            ),
+        );
+        macAgentBridge.message(
+          socket,
+          JSON.stringify({
+            type: "result",
+            jobId: traceJob.job.id,
+            ok: true,
+            content: JSON.stringify({
+              status: "not_found",
+              developerTask: preservedTask,
+            }),
+          }),
+        );
+        expect(await handled).toBe(true);
+        const answer = await waitFor(() =>
+          sent
+            .map((value) => JSON.parse(value))
+            .find(
+              (value) => value.type === "job" && value.job.purpose === "answer",
+            ),
+        );
+        expect(answer.job.channelId).toBe(threadId);
+        expect(answer.job.request).toBe(
+          scenario === "no-session"
+            ? `${preservedTask.request}\n\nAdditional direction: try again`
+            : "try again",
+        );
+        expect(paths.some((path) => path.endsWith("/threads"))).toBe(false);
+        if (scenario === "owner" || scenario === "no-session") {
+          expect(answer.job.developerTask).toEqual({
+            id: "preserved-task",
+            title: "Original coding task",
+            ...(scenario === "no-session"
+              ? {}
+              : { resumeSessionId: "preserved-codex-session" }),
+          });
+        } else {
+          expect(answer.job.developerTask.id).not.toBe("preserved-task");
+          expect(answer.job.developerTask.resumeSessionId).toBeUndefined();
+        }
+        macAgentBridge.message(
+          socket,
+          JSON.stringify({
+            type: "result",
+            jobId: answer.job.id,
+            ok: true,
+            content: "Finished the change.",
+          }),
+        );
+        await waitFor(() =>
+          paths.find((path) => path === `/channels/${threadId}/messages`),
+        );
+      } finally {
+        macAgentBridge.close(socket);
+        if (oldSecret === undefined)
+          delete process.env.MINISAGO_WORKER_BRIDGE_SECRET;
+        else process.env.MINISAGO_WORKER_BRIDGE_SECRET = oldSecret;
+      }
+    },
+  );
 
   test("continues the original requester's next message after an answer", () => {
     let now = 1_000;
@@ -1909,6 +2079,34 @@ describe("Discord chatbot", () => {
     expect(parsePreviousTraceLookup("not json")).toEqual({
       status: "unavailable",
     });
+    const developerTask = {
+      id: "preserved-task",
+      requesterUserId: "owner",
+      repository: "sago-cream/mini-sago",
+      request: "finish it",
+      resumeSessionId: "codex-session",
+    };
+    expect(
+      parsePreviousTraceLookup(
+        JSON.stringify({ status: "complete", trace, developerTask }),
+      ),
+    ).toEqual({ status: "complete", trace, developerTask });
+    for (const invalid of [
+      { id: ".." },
+      { id: "../escape" },
+      { resumeSessionId: 123 },
+      { requesterUserId: null },
+      { repository: null },
+    ]) {
+      expect(
+        parsePreviousTraceLookup(
+          JSON.stringify({
+            status: "not_found",
+            developerTask: { ...developerTask, ...invalid },
+          }),
+        ),
+      ).toEqual({ status: "not_found" });
+    }
   });
 
   test("validates the router's proposed execution route and repository", () => {

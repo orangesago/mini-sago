@@ -122,6 +122,15 @@ export type ChatbotTaskProgress = {
   timing?: { stage: string; durationMs: number };
 };
 
+export type PreservedDeveloperTask = {
+  id: string;
+  requesterUserId: string;
+  repository: string;
+  request: string;
+  title?: string;
+  resumeSessionId?: string;
+};
+
 export type ChatbotTraceContext = {
   historyCount?: number;
   contextMessageCount: number;

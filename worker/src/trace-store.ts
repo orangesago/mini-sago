@@ -7,6 +7,7 @@ import type {
   CodexJob,
   ChatbotPromptTelemetry,
   ChatbotTraceContext,
+  PreservedDeveloperTask,
 } from "../../contracts/worker-contract";
 
 const RETENTION_MS = 14 * 24 * 60 * 60 * 1_000;
@@ -172,6 +173,45 @@ export class ChatbotTraceStore {
          WHERE job_id = ?`,
       )
       .run(JSON.stringify(prompt), prompt.promptVersion, jobId);
+  }
+
+  recordDeveloperSession(jobId: string, sessionId: string) {
+    this.database
+      .query(
+        `UPDATE chatbot_trace_jobs
+         SET input_json = json_set(input_json, '$.developerTask.resumeSessionId', ?)
+         WHERE job_id = ? AND json_extract(input_json, '$.developerTask.id') IS NOT NULL`,
+      )
+      .run(sessionId, jobId);
+  }
+
+  preservedDeveloperTask(
+    channelId: string,
+    now = Date.now(),
+  ): PreservedDeveloperTask | undefined {
+    const row = this.database
+      .query(
+        `SELECT input_json FROM chatbot_trace_jobs
+         WHERE channel_id = ? AND purpose = 'answer'
+           AND json_extract(input_json, '$.developerTask.id') IS NOT NULL
+           AND coalesce(finished_at, started_at) >= ?
+         ORDER BY started_at DESC LIMIT 1`,
+      )
+      .get(channelId, now - 3 * 24 * 60 * 60_000) as {
+      input_json: string;
+    } | null;
+    const job = safeJson<CodexJob>(row?.input_json ?? null);
+    if (job?.executionRoute !== "oracle" || !job.developerTask) return;
+    return {
+      id: job.developerTask.id,
+      ...(job.developerTask.title ? { title: job.developerTask.title } : {}),
+      ...(job.developerTask.resumeSessionId
+        ? { resumeSessionId: job.developerTask.resumeSessionId }
+        : {}),
+      requesterUserId: job.requesterUserId,
+      repository: job.repository,
+      request: job.request,
+    };
   }
 
   start(job: CodexJob, now = Date.now(), metadata: TraceStoreMetadata = {}) {
