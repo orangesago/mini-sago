@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveCodexPath } from "../codex-path";
 import {
   developerFilesystemPermissions,
   preflightDeveloperRuntime,
@@ -7,6 +8,7 @@ import {
 } from "../developer-runtime";
 
 const root = "/tmp/minisago-sandbox-smoke";
+const codexPath = await resolveCodexPath("/usr/local/bin/codex", null, []);
 const directory = join(root, "repo");
 const temporaryDirectory = join(root, "tmp");
 const bin = join(root, "bin");
@@ -51,7 +53,7 @@ await preflightDeveloperRuntime({
   workspace,
   environment,
   repository: "fixture/repo",
-  codexPath: "/usr/local/bin/codex",
+  codexPath,
   configArguments: configs.flatMap((c) => ["--config", c]),
 });
 // Repeat with a new process and the same persistent paths, as a task follow-up does.
@@ -59,7 +61,7 @@ await preflightDeveloperRuntime({
   workspace,
   environment,
   repository: "fixture/repo",
-  codexPath: "/usr/local/bin/codex",
+  codexPath,
   configArguments: configs.flatMap((c) => ["--config", c]),
 });
 // A directory writable by the worker must still be protected from task commands.
@@ -67,7 +69,7 @@ const outside = "/tmp/minisago-outside-task";
 await mkdir(outside, { recursive: true });
 await runtimeCommand(
   [
-    "/usr/local/bin/codex",
+    codexPath,
     "sandbox",
     ...configs.flatMap((c) => ["--config", c]),
     "--",

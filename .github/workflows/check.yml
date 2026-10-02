@@ -21,6 +21,7 @@ jobs:
       - run: bun install --cwd worker --frozen-lockfile
       - run: bun run build
       - run: bun run --cwd worker build
+      - run: bun test worker/src/codex-path.test.ts worker/src/config.test.ts
       - run: bun test src/chatbot/ccxp-sync.test.ts src/chatbot/ccxp-meetings.test.ts src/discord/feature-availability.test.ts src/discord/jobs/ccxp-auth-notifications.test.ts src/chatbot/mcp.test.ts
 
   dev-tasks:

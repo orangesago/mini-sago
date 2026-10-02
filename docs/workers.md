@@ -91,6 +91,9 @@ bun run mac-agent:status
 The installer consumes `.env.local`, creates an isolated Codex home linked to
 the existing authentication file, and installs the per-user LaunchAgent
 `dev.hsichen.minisago-mac-agent`.
+It discovers the current or legacy app-bundled Codex executable and resolves
+npm installations to their native binary so the helper can run with its
+restricted PATH. Set `MINISAGO_CODEX_PATH` to select a particular installation.
 
 The helper connects only while the user session is unlocked, disconnects
 before sleep or lock, and reconnects afterward. Display sleep without a session
