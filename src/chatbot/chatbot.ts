@@ -547,6 +547,20 @@ function channelMessageBody(content: string | null) {
   };
 }
 
+function messageUpload(body: unknown, files: ChatbotOutgoingFile[]) {
+  if (!files.length) return undefined;
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify(body));
+  for (const [index, file] of files.entries()) {
+    form.append(
+      `files[${index}]`,
+      new Blob([Buffer.from(file.data, "base64")], { type: file.contentType }),
+      file.filename,
+    );
+  }
+  return form;
+}
+
 export async function postChatbotResponse(
   message: DiscordMessage,
   content: string | string[] | null,
@@ -575,23 +589,7 @@ export async function postChatbotResponse(
         ? channelMessageBody(content)
         : replyBody(message, content);
     const uploadFiles = index === 0 ? files : [];
-    const formData =
-      uploadFiles.length > 0
-        ? (() => {
-            const form = new FormData();
-            form.append("payload_json", JSON.stringify(body));
-            for (const [fileIndex, file] of uploadFiles.entries()) {
-              form.append(
-                `files[${fileIndex}]`,
-                new Blob([Buffer.from(file.data, "base64")], {
-                  type: file.contentType,
-                }),
-                file.filename,
-              );
-            }
-            return form;
-          })()
-        : undefined;
+    const formData = messageUpload(body, uploadFiles);
     await discordRequest(`/channels/${message.channel_id}/messages`, {
       method: "POST",
       ...(formData ? { formData } : { body }),
@@ -872,10 +870,12 @@ class DeveloperTaskRegistry {
     task.summary =
       "Turn finished. Reply in this thread to continue the same task.";
     await this.settleTrace(task, true);
-    if (result.content.trim()) {
-      for (const answer of formatDiscordAnswers(result.content)) {
-        await this.post(task, answer);
-      }
+    const answers: Array<string | null> = result.content.trim()
+      ? formatDiscordAnswers(result.content)
+      : [];
+    if (!answers.length && result.files?.length) answers.push(null);
+    for (const [index, answer] of answers.entries()) {
+      await this.post(task, answer, index === 0 ? result.files : []);
     }
     const nextRequest = task.nextRequest;
     task.nextRequest = undefined;
@@ -966,10 +966,16 @@ class DeveloperTaskRegistry {
     await this.post(task, content);
   }
 
-  private async post(task: DeveloperTask, content: string) {
+  private async post(
+    task: DeveloperTask,
+    content: string | null,
+    files: ChatbotOutgoingFile[] = [],
+  ) {
+    const body = channelMessageBody(content);
+    const formData = messageUpload(body, files);
     await task.discordRequest(`/channels/${task.threadId}/messages`, {
       method: "POST",
-      body: { content, allowed_mentions: { parse: [] } },
+      ...(formData ? { formData } : { body }),
     });
   }
 }

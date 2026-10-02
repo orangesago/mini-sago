@@ -29,6 +29,7 @@ import {
   preflightDeveloperRuntime,
 } from "./developer-runtime";
 import {
+  prepareDeveloperImages,
   prepareGeneratedArtifacts,
   prepareOutgoingFiles,
 } from "./media/outgoing-files";
@@ -1234,7 +1235,13 @@ export async function runCodexJob(job: CodexJob, options: CodexRunOptions) {
         onMcpToolCall: options.onMcpToolCall,
         signal: timeoutController.signal,
       });
-      return { content, files: [] };
+      return job.developerTask
+        ? await prepareDeveloperImages(
+            content,
+            workspace.directory,
+            prepared.outputsDirectory,
+          )
+        : { content, files: [] };
     }
 
     const runEnvironment = codexEnvironment(
@@ -1357,7 +1364,13 @@ export async function runCodexJob(job: CodexJob, options: CodexRunOptions) {
       });
     }
     if (job.purpose !== "answer" || hasDeveloperAccess) {
-      return { content, files: [] };
+      return hasDeveloperAccess && job.developerTask && developerWorkspace
+        ? await prepareDeveloperImages(
+            content,
+            developerWorkspace.directory,
+            prepared.outputsDirectory,
+          )
+        : { content, files: [] };
     }
     const validationDone = clock.start("worker.validate_identity");
     const answer = JSON.parse(content) as Record<string, unknown>;

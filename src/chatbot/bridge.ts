@@ -3,6 +3,7 @@ import type { Server, ServerWebSocket } from "bun";
 
 import {
   CHATBOT_JOB_TIMEOUT_MS,
+  CHATBOT_OUTGOING_FILE_LIMITS,
   CHATBOT_PROTOCOL_VERSION,
   type ChatbotFailureKind,
   type ChatbotJob,
@@ -156,7 +157,7 @@ function validOutgoingFiles(
   return (
     value === undefined ||
     (Array.isArray(value) &&
-      value.length <= 1 &&
+      value.length <= CHATBOT_OUTGOING_FILE_LIMITS.count &&
       value.every(
         (file) =>
           file &&
@@ -169,12 +170,14 @@ function validOutgoingFiles(
           file.contentType.length <= 100 &&
           Number.isInteger(file.size) &&
           file.size >= 0 &&
-          file.size <= 8 * 1024 * 1024 &&
+          file.size <= CHATBOT_OUTGOING_FILE_LIMITS.bytes &&
           typeof file.data === "string" &&
           file.data.length <= 12 * 1024 * 1024 &&
           /^[A-Za-z0-9+/]*={0,2}$/u.test(file.data) &&
           Buffer.byteLength(file.data, "base64") === file.size,
-      ))
+      ) &&
+      value.reduce((total, file) => total + file.size, 0) <=
+        CHATBOT_OUTGOING_FILE_LIMITS.bytes)
   );
 }
 

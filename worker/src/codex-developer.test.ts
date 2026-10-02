@@ -99,3 +99,28 @@ test("enables repository instruction discovery in new and resumed developer runs
   }
   expect(calls[1]!.resumeThreadId).toBe("session-1");
 });
+
+test("returns final screenshot bytes from the native developer runner", async () => {
+  const { job, options, directory } = await developerFixture();
+  const path = join(directory, "after.png");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jivsAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await Bun.write(path, png);
+  const appServer = {
+    run: async () => `Done.\n\n![After](<${path}>)`,
+  } as unknown as CodexAppServerManager;
+  const result = await runCodexJob(job, { ...options, appServer });
+  expect(result).toEqual({
+    content: "Done.\n\nAfter",
+    files: [
+      {
+        filename: "after.png",
+        contentType: "image/png",
+        size: png.length,
+        data: png.toString("base64"),
+      },
+    ],
+  });
+});
