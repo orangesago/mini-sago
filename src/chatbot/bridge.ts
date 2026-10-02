@@ -3,7 +3,6 @@ import type { Server, ServerWebSocket } from "bun";
 
 import {
   CHATBOT_JOB_TIMEOUT_MS,
-  CHATBOT_DEV_JOB_TIMEOUT_MS,
   CHATBOT_PROTOCOL_VERSION,
   type ChatbotFailureKind,
   type ChatbotJob,
@@ -27,7 +26,7 @@ type PendingJob = {
   workerId: string;
   workflowId?: string;
   resolve: (result: MacAgentJobResult) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | undefined;
   onProgress?: (progress: ChatbotTaskProgress) => void;
   onReplyDelta?: (delta: string) => void;
   replyCharacters: number;
@@ -637,11 +636,7 @@ export class MacAgentBridge {
     }
 
     const result = new Promise<MacAgentJobResult>((resolve) => {
-      const timeoutMs =
-        job.executionRoute === "oracle" && job.purpose === "answer"
-          ? CHATBOT_DEV_JOB_TIMEOUT_MS
-          : CHATBOT_JOB_TIMEOUT_MS;
-      const timer = setTimeout(() => {
+      const onTimeout = () => {
         const pendingJob = this.pendingJobs.get(job.id);
         if (!pendingJob) return;
 
@@ -654,7 +649,11 @@ export class MacAgentBridge {
           error: "Local Codex timed out.",
           failureKind: "timeout",
         });
-      }, timeoutMs);
+      };
+      const timer =
+        job.executionRoute === "oracle" && job.purpose === "answer"
+          ? undefined
+          : setTimeout(onTimeout, CHATBOT_JOB_TIMEOUT_MS);
 
       const pendingJob = {
         id: job.id,

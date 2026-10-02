@@ -211,7 +211,7 @@ export function supplementalCapabilities({
       category: "development",
       availability: executionRoute === "oracle" ? "available" : "conditional",
       description:
-        "Inspect repositories visible to the dedicated GitHub account and handle debugging, tests, builds, code changes, commits, feature-branch pushes, issue work, draft pull requests, and ordinary pull-request merges when explicitly requested.",
+        "Inspect repositories visible to the dedicated GitHub account and handle debugging, tests, builds, code changes, commits, feature-branch pushes, issue work, draft pull requests, releases, GitHub workflows, and ordinary pull-request merges when explicitly requested.",
       condition:
         executionRoute === "oracle"
           ? "This owner request is running in Oracle."

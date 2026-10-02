@@ -139,6 +139,11 @@ storage and repository access through the actual Codex sandbox. A failed check
 or sandbox initialization error fails the job and remains visible in the thread
 and worker trace. Finishing a turn does not certify PR or CI completion.
 
+Development turns have no fixed job deadline. They discover the selected repository's
+`AGENTS.md` and `AGENTS.override.md` guidance. Release and GitHub workflow commands
+are available within that repository; publishing releases and mutating workflows
+require an explicit owner request and the GitHub login's corresponding permissions.
+
 Run `bash scripts/test-dev-sandbox.sh` to check the pinned Linux runtime without
 credentials or a model call. On AppArmor hosts, first load the existing
 production profile with `sudo apparmor_parser -r scripts/test-fixtures/worker-security/minisago-worker.apparmor`.
