@@ -604,6 +604,7 @@ type DeveloperTask = {
   threadId: string;
   requesterUserId: string;
   repository: string;
+  allowParticipantSteering: () => boolean;
   request: string;
   job: OracleAnswerJob;
   workflow?: WorkflowLease;
@@ -667,6 +668,11 @@ class DeveloperTaskRegistry {
       !message.author?.id ||
       message.author.bot ||
       message.webhook_id
+    )
+      return false;
+    if (
+      message.author.id !== task.requesterUserId &&
+      !task.allowParticipantSteering()
     )
       return false;
     const addressingMode = chatbotAddressingMode(
@@ -1797,6 +1803,10 @@ export async function handleChatbotMention({
           threadId,
           requesterUserId,
           repository: job.repository,
+          allowParticipantSteering: () =>
+            featureAvailability?.isEnabled("developer_steering", {
+              guildId: message.guild_id,
+            }) ?? false,
           request,
           job: {
             ...job,

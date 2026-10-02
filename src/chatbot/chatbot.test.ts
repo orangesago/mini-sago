@@ -175,8 +175,10 @@ describe("Discord chatbot", () => {
     });
     let contextClient: Client | undefined;
     const featurePolicy = { defaultEnabled: false, rules: [] };
+    let participantSteeringEnabled = false;
     const featureAvailability = {
-      isEnabled: () => false,
+      isEnabled: (feature: string) =>
+        feature === "developer_steering" && participantSteeringEnabled,
       list: () => ({
         version: 1 as const,
         features: {
@@ -436,6 +438,26 @@ describe("Discord chatbot", () => {
         ),
       ).toBe(true);
 
+      for (const content of ["stop", "status", "also update the docs"]) {
+        expect(
+          await handleChatbotMention({
+            message: {
+              id: `blocked-${content}`,
+              channel_id: "coding-thread",
+              guild_id: "917436845187563610",
+              content,
+              timestamp: new Date().toISOString(),
+              author: { id: "community-participant", username: "Daniel" },
+            },
+            botUserId: BOT_ID,
+            accessConfig: ACCESS_CONFIG,
+            discordRequest: async () => {
+              throw new Error("Blocked steering must not post.");
+            },
+          }),
+        ).toBe(false);
+      }
+      participantSteeringEnabled = true;
       expect(
         await handleChatbotMention({
           message: {
