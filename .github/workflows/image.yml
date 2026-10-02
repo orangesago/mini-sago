@@ -27,6 +27,13 @@ jobs:
             image: ghcr.io/sago-cream/minisago-ccxp
     steps:
       - uses: actions/checkout@v7
+      - name: Resolve stable Codex version
+        if: matrix.name == 'worker'
+        id: codex
+        run: |
+          version="$(bash scripts/resolve-codex-version.sh)"
+          echo "build_args=CODEX_VERSION=$version" >> "$GITHUB_OUTPUT"
+          echo "Building Oracle worker with Codex $version"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -44,6 +51,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ steps.codex.outputs.build_args }}
           platforms: linux/arm64
           push: true
           tags: ${{ steps.metadata.outputs.tags }}

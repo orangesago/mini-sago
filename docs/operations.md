@@ -48,6 +48,13 @@ ghcr.io/sago-cream/minisago
 ghcr.io/sago-cream/minisago-worker
 ```
 
+Oracle worker image builds resolve the latest stable Codex CLI release and
+install that exact version. Model-only PRs therefore refresh Codex on the next
+release without a separate version bump. PR CI runs the Linux sandbox smoke
+check with the latest stable CLI; set `CODEX_VERSION` when running
+`scripts/test-dev-sandbox.sh` to check a specific release. Published commit-tagged
+images retain their installed version for rollback.
+
 For a general self-host, run the core image with the hosted-service variables,
 persist `/app/state`, expose port `3000` through an HTTPS reverse proxy, and run
 at least one separately authenticated worker. Replace the
