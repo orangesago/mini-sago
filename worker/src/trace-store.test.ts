@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { ChatAnswerJob } from "../../contracts/worker-contract";
+import type {
+  ChatAnswerJob,
+  OracleAnswerJob,
+} from "../../contracts/worker-contract";
 import { ChatbotTraceStore } from "./trace-store";
 
 const directories: string[] = [];
@@ -39,6 +42,63 @@ function job(overrides: Partial<ChatAnswerJob>): ChatAnswerJob {
 }
 
 describe("chatbot trace store", () => {
+  test("recovers a failed coding task and its session after reopening the store", () => {
+    const traces = store();
+    const now = Date.now();
+    const answer: OracleAnswerJob = {
+      ...job({}),
+      executionRoute: "oracle",
+      repository: "sago-cream/mini-sago",
+      developerTask: { id: "coding-task", title: "Original task" },
+    };
+    traces.start(answer, now);
+    traces.recordDeveloperSession(answer.id, "codex-session");
+    traces.fail(answer.id, "Task stopped.", now + 100);
+    // Later chat replies must not hide the preserved coding workspace.
+    const chat = job({ id: "later-chat", requestMessageId: "later-request" });
+    traces.start(chat, now + 200);
+    traces.recordDeveloperSession(chat.id, "chat-session");
+    traces.finish(chat.id, "Chat reply", now + 300);
+    traces.close();
+    const reopened = new ChatbotTraceStore(
+      join(directories.at(-1)!, "traces.sqlite"),
+    );
+    expect(reopened.preservedDeveloperTask("channel-1", now + 400)).toEqual({
+      id: "coding-task",
+      title: "Original task",
+      resumeSessionId: "codex-session",
+      requesterUserId: "test-user",
+      repository: "sago-cream/mini-sago",
+      request: "What happened?",
+    });
+    expect(
+      reopened.preservedDeveloperTask("other-channel", now + 400),
+    ).toBeUndefined();
+    expect(
+      reopened.preservedDeveloperTask(
+        "channel-1",
+        now + 3 * 24 * 60 * 60_000 + 101,
+      ),
+    ).toBeUndefined();
+    reopened.close();
+  });
+
+  test("recovers session metadata recorded before the worker upgrade", () => {
+    const traces = store();
+    const answer: OracleAnswerJob = {
+      ...job({}),
+      executionRoute: "oracle",
+      repository: "sago-cream/mini-sago",
+      developerTask: { id: "legacy-task", resumeSessionId: "legacy-session" },
+    };
+    traces.start(answer);
+    traces.fail(answer.id, "Task stopped.");
+    expect(traces.preservedDeveloperTask("channel-1")).toMatchObject({
+      id: "legacy-task",
+      resumeSessionId: "legacy-session",
+    });
+    traces.close();
+  });
   test("returns sanitized observable metadata for the latest answer", () => {
     const traces = store();
     const answer = job({

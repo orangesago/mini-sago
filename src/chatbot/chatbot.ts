@@ -41,6 +41,7 @@ import type {
   ChatbotTaskProgress,
   AnswerJob,
   OracleAnswerJob,
+  PreservedDeveloperTask,
 } from "../../contracts/worker-contract";
 import { parseChatbotAnswerDecision } from "../../contracts/answer-contract";
 import { budgetMessages } from "../../contracts/context-budget";
@@ -625,11 +626,15 @@ export function developerThreadName(title?: string) {
   return title?.replace(/\s+/gu, " ").trim().slice(0, 100) || "Coding task";
 }
 
-async function createDeveloperThread(
+export async function createDeveloperThread(
   message: DiscordMessage,
   title: string | undefined,
   discordRequest: DiscordRequest,
 ) {
+  const channel = await discordRequest<{ type: number }>(
+    `/channels/${message.channel_id}`,
+  );
+  if ([10, 11, 12].includes(channel.type)) return message.channel_id;
   const thread = await discordRequest<{ id: string }>(
     `/channels/${message.channel_id}/messages/${message.id}/threads`,
     {
@@ -1264,6 +1269,7 @@ export async function handleChatbotMention({
       type PreviousTrace = {
         status: "complete" | "not_found" | "unavailable";
         trace?: ChatbotTraceContext;
+        developerTask?: PreservedDeveloperTask;
       };
       let previousTracePromise: Promise<PreviousTrace> | undefined;
       const getPreviousTrace = () =>
@@ -1744,6 +1750,8 @@ export async function handleChatbotMention({
         }
       }
 
+      // Routing may have selected a different worker with its own trace state.
+      previousTracePromise = undefined;
       if (!executionOptions.lazyPreviousTrace) await getPreviousTrace();
 
       const requestCapabilities = supplementalCapabilities({
@@ -1796,12 +1804,21 @@ export async function handleChatbotMention({
       }
 
       if (job.executionRoute === "oracle" && message.guild_id) {
-        const taskId = randomUUID();
         const threadId = await createDeveloperThread(
           message,
           developerThreadTitle,
           discordRequest,
         );
+        const preserved =
+          threadId === message.channel_id
+            ? (await getPreviousTrace()).developerTask
+            : undefined;
+        const recovered =
+          preserved?.requesterUserId === requesterUserId &&
+          preserved.repository === job.repository
+            ? preserved
+            : undefined;
+        const taskId = recovered?.id ?? randomUUID();
         deferredDeveloperTask = true;
         contextChannelId = threadId;
         developerTasks.start({
@@ -1813,16 +1830,23 @@ export async function handleChatbotMention({
             featureAvailability?.isEnabled("developer_steering", {
               guildId: message.guild_id,
             }) ?? false,
-          request,
+          request:
+            recovered && !recovered.resumeSessionId
+              ? `${recovered.request}\n\nAdditional direction: ${request}`
+              : request,
           job: {
             ...job,
             developerTask: {
               id: taskId,
-              title: developerThreadName(developerThreadTitle),
+              title:
+                recovered?.title ?? developerThreadName(developerThreadTitle),
             },
           },
           workflow,
           state: "running",
+          ...(recovered?.resumeSessionId
+            ? { sessionId: recovered.resumeSessionId }
+            : {}),
           summary: "Preparing an isolated workspace.",
           traceMessageIds: [],
           messageQueue: Promise.resolve(),

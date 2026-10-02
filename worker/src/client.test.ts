@@ -32,38 +32,56 @@ describe("worker failure reporting", () => {
   });
 });
 
-test("serves lazy trace reads even when all generation slots are occupied", async () => {
-  const { MacAgentClient } = await import("./client");
-  const replies: unknown[] = [];
-  const currentJobs = new Map([["active-answer", new AbortController()]]);
-  const receiver = {
-    config: { maxConcurrentJobs: 1 },
-    currentJobs,
-    traceStore: { previousTrace: () => undefined },
-    send: (message: unknown) => replies.push(message),
-  };
-  const handle = (
-    MacAgentClient.prototype as unknown as {
-      handleJob: (this: typeof receiver, job: ChatbotJob) => Promise<void>;
-    }
-  ).handleJob;
-  await handle.call(receiver, {
-    id: "lazy-read",
-    purpose: "trace_lookup",
-    requesterUserId: "owner",
-    channelId: "channel",
-    requestMessageId: "message",
-    request: "why?",
-    messages: [],
-  });
-  expect(replies).toEqual([
-    {
-      type: "result",
-      jobId: "lazy-read",
-      ok: true,
-      content: '{"status":"not_found"}',
-    },
-  ]);
-  expect(currentJobs.size).toBe(1);
-  expect(currentJobs.has("active-answer")).toBe(true);
-});
+test.each([false, true])(
+  "serves trace and task recovery reads even when all generation slots are occupied (recovery %s)",
+  async (recover) => {
+    const { MacAgentClient } = await import("./client");
+    const replies: unknown[] = [];
+    const currentJobs = new Map([["active-answer", new AbortController()]]);
+    const developerTask = recover
+      ? {
+          id: "preserved-task",
+          requesterUserId: "owner",
+          repository: "sago-cream/mini-sago",
+          request: "fix it",
+          resumeSessionId: "codex-session",
+        }
+      : undefined;
+    const receiver = {
+      config: { maxConcurrentJobs: 1 },
+      currentJobs,
+      traceStore: {
+        previousTrace: () => undefined,
+        preservedDeveloperTask: () => developerTask,
+      },
+      send: (message: unknown) => replies.push(message),
+    };
+    const handle = (
+      MacAgentClient.prototype as unknown as {
+        handleJob: (this: typeof receiver, job: ChatbotJob) => Promise<void>;
+      }
+    ).handleJob;
+    await handle.call(receiver, {
+      id: "lazy-read",
+      purpose: "trace_lookup",
+      requesterUserId: "owner",
+      channelId: "channel",
+      requestMessageId: "message",
+      request: "why?",
+      messages: [],
+    });
+    expect(replies).toEqual([
+      {
+        type: "result",
+        jobId: "lazy-read",
+        ok: true,
+        content: JSON.stringify({
+          status: "not_found",
+          ...(developerTask ? { developerTask } : {}),
+        }),
+      },
+    ]);
+    expect(currentJobs.size).toBe(1);
+    expect(currentJobs.has("active-answer")).toBe(true);
+  },
+);

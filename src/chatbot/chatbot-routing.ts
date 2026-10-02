@@ -1,6 +1,7 @@
 import type {
   ChatbotExecutionRoute,
   ChatbotTraceContext,
+  PreservedDeveloperTask,
 } from "../../contracts/worker-contract";
 
 export function executionRouteOrChat(
@@ -12,13 +13,43 @@ export function executionRouteOrChat(
 export function parsePreviousTraceLookup(content: string): {
   status: "complete" | "not_found" | "unavailable";
   trace?: ChatbotTraceContext;
+  developerTask?: PreservedDeveloperTask;
 } {
   try {
     const payload = JSON.parse(content) as {
       status?: unknown;
       trace?: unknown;
+      developerTask?: Partial<PreservedDeveloperTask>;
     };
-    if (payload.status === "not_found") return { status: "not_found" };
+    const task = payload.developerTask;
+    const developerTask =
+      task &&
+      typeof task.id === "string" &&
+      /^[a-z0-9][a-z0-9._-]{0,127}$/iu.test(task.id) &&
+      task.id !== "." &&
+      task.id !== ".." &&
+      typeof task.requesterUserId === "string" &&
+      typeof task.repository === "string" &&
+      typeof task.request === "string" &&
+      (task.title === undefined || typeof task.title === "string") &&
+      (task.resumeSessionId === undefined ||
+        typeof task.resumeSessionId === "string")
+        ? {
+            id: task.id,
+            requesterUserId: task.requesterUserId,
+            repository: task.repository,
+            request: task.request,
+            ...(task.title ? { title: task.title } : {}),
+            ...(task.resumeSessionId
+              ? { resumeSessionId: task.resumeSessionId }
+              : {}),
+          }
+        : undefined;
+    if (payload.status === "not_found")
+      return {
+        status: "not_found",
+        ...(developerTask ? { developerTask } : {}),
+      };
     if (
       payload.status !== "complete" ||
       !payload.trace ||
@@ -39,6 +70,7 @@ export function parsePreviousTraceLookup(content: string): {
     return {
       status: "complete",
       trace: trace as ChatbotTraceContext,
+      ...(developerTask ? { developerTask } : {}),
     };
   } catch {
     return { status: "unavailable" };
