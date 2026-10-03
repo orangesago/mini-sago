@@ -56,6 +56,19 @@ await preflightDeveloperRuntime({
   codexPath,
   configArguments: configs.flatMap((c) => ["--config", c]),
 });
+// Check that the bundled uploader is executable inside the developer sandbox.
+await runtimeCommand(
+  [
+    codexPath,
+    "sandbox",
+    ...configs.flatMap((c) => ["--config", c]),
+    "--",
+    "gh-image",
+    "--version",
+  ],
+  directory,
+  environment,
+);
 // Repeat with a new process and the same persistent paths, as a task follow-up does.
 await preflightDeveloperRuntime({
   workspace,
