@@ -23,6 +23,11 @@ RUN apt-get update \
   && git config --system user.email 94444077+sago-cream@users.noreply.github.com \
   && git config --system credential.https://github.com.helper '!/usr/bin/gh auth git-credential'
 
+COPY scripts/install-gh-image.py /tmp/install-gh-image.py
+RUN python3 /tmp/install-gh-image.py "$(dpkg --print-architecture)" \
+  && gh-image --version \
+  && rm /tmp/install-gh-image.py
+
 ARG CODEX_VERSION=0.160.0
 RUN BUN_INSTALL=/usr/local bun add --global "@openai/codex@${CODEX_VERSION}" \
   && codex --version

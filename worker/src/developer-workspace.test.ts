@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -405,6 +405,78 @@ describe("developer workspace", () => {
         }).exited,
       ).toBe(77);
     }
+  });
+
+  test("runs image uploads with internal authentication while guarding task commands", async () => {
+    const settings = await options();
+    const workspace = await prepareDeveloperWorkspace(
+      job(),
+      settings,
+      async () => undefined,
+    );
+    const bin = workspace.environment.PATH!.split(":")[0]!;
+    const realBin = join(settings.githubWorktreeRoot, "real-bin");
+    await mkdir(realBin, { recursive: true });
+    const realGh = join(realBin, "gh");
+    const image = join(realBin, "gh-image");
+    await Bun.write(
+      realGh,
+      '#!/bin/sh\n[ "$1 $2" = "auth token" ]\necho fixture-auth\n',
+    );
+    await Bun.write(
+      image,
+      '#!/bin/sh\nset -eu\n[ "$(gh auth token)" = "fixture-auth" ]\nprintf "%s\\n" "$@"\n',
+    );
+    await Promise.all([chmod(realGh, 0o700), chmod(image, 0o700)]);
+    const environment = {
+      ...process.env,
+      ...workspace.environment,
+      MINISAGO_REAL_GH: realGh,
+      MINISAGO_GH_IMAGE: image,
+    };
+    for (const args of [
+      ["image", "after.png", "--repo", "sago-cream/mini-sago"],
+      [
+        "image",
+        "download",
+        "https://github.com/user-attachments/assets/fixture",
+        "--output",
+        "after.png",
+      ],
+      ["image", "--help"],
+      ["image", "--version"],
+    ]) {
+      expect(await localCommand([join(bin, "gh"), ...args], environment)).toBe(
+        args.slice(1).join("\n"),
+      );
+    }
+    for (const args of [
+      ["auth", "token"],
+      ["image", "extract-token"],
+      ["image", "check-token"],
+      ["image", "after.png", "--token", "secret"],
+      ["image", "--token=secret", "after.png"],
+      ["image", "after.png", "--", "pr", "create"],
+      ["image", "after.png", "--", "pr", "merge", "42", "--admin"],
+      ["extension", "install", "other/gh-extension"],
+    ]) {
+      expect(
+        await Bun.spawn([join(bin, "gh"), ...args], {
+          env: environment,
+          stdout: "ignore",
+          stderr: "ignore",
+        }).exited,
+      ).toBe(77);
+    }
+    const missing = Bun.spawn([join(bin, "gh"), "image", "after.png"], {
+      env: { ...environment, MINISAGO_GH_IMAGE: "" },
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    expect(await missing.exited).toBe(127);
+    expect(await new Response(missing.stderr).text()).toContain(
+      "not installed",
+    );
   });
 
   test("rejects a repository outside the worker advertisement", async () => {

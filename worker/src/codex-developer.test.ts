@@ -124,3 +124,93 @@ test("returns final screenshot bytes from the native developer runner", async ()
     ],
   });
 });
+
+test.each([
+  {
+    repository: "OWNER/REPO",
+    socket: "/run/minisago-deploy.sock",
+    enabled: true,
+  },
+  {
+    repository: "owner/other",
+    socket: "/run/minisago-deploy.sock",
+    enabled: false,
+  },
+  { repository: "owner/repo", socket: undefined, enabled: false },
+])(
+  "exposes deployment only for the configured repository and socket: %j",
+  async ({ repository, socket, enabled }) => {
+    const { job, options } = await developerFixture();
+    const calls: DeveloperRun[] = [];
+    const appServer = {
+      run: async (call: DeveloperRun) => {
+        calls.push(call);
+        return "Done.";
+      },
+    } as unknown as CodexAppServerManager;
+    const settings = {
+      ...options,
+      appServer,
+      chatbotRepository: repository,
+      deploySocketPath: socket,
+    };
+    await runCodexJob(job, settings);
+    await runCodexJob(
+      {
+        ...job,
+        id: "turn-2",
+        developerTask: { id: "task-1", resumeSessionId: "session-1" },
+      },
+      settings,
+    );
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      const config = call.threadConfig as {
+        mcp_servers?: { minisago_deploy?: { env: Record<string, string> } };
+      };
+      expect(Boolean(config.mcp_servers?.minisago_deploy)).toBe(enabled);
+      expect(
+        call.developerInstructions.includes("deploy_minisago is available"),
+      ).toBe(enabled);
+      if (enabled) {
+        expect(config.mcp_servers!.minisago_deploy!.env).toEqual({
+          MINISAGO_DEPLOY_SOCKET: socket!,
+          MINISAGO_DISCORD_CHANNEL_ID: job.channelId,
+        });
+
+        expect(call.developerInstructions).toContain(
+          "no switch to main or SSH is required",
+        );
+      }
+      expect(call.environment.MINISAGO_DEPLOY_SOCKET).toBeUndefined();
+      expect(call.developerInstructions).toContain(
+        "Do not ask for the same authorization again",
+      );
+      expect(call.developerInstructions).toContain(
+        "gh image /absolute/path/to/screenshot.png",
+      );
+    }
+  },
+);
+
+test("exposes the deployment tool through the exec developer runner", async () => {
+  const { root, job, options } = await developerFixture();
+  const capture = join(root, "exec-arguments");
+  await Bun.write(
+    options.codexPath,
+    `#!/bin/sh
+printf '%s\\n' "$@" > '${capture}'
+printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Done."}}'
+`,
+  );
+  const result = await runCodexJob(job, {
+    ...options,
+    chatbotRepository: job.repository,
+    deploySocketPath: "/run/minisago-deploy.sock",
+  });
+  expect(result.content).toBe("Done.");
+  const arguments_ = await Bun.file(capture).text();
+  expect(arguments_).toContain("mcp_servers.minisago_deploy.command=");
+  expect(arguments_).toContain('MINISAGO_DISCORD_CHANNEL_ID="thread-1"');
+  expect(arguments_).toContain("deploy_minisago is available");
+});

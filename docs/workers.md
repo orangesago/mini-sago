@@ -146,6 +146,20 @@ Development turns have no fixed job deadline. They discover the selected reposit
 are available within that repository; publishing releases and mutating workflows
 require an explicit owner request and the GitHub login's corresponding permissions.
 
+Development shells support `gh image` uploads and GitHub attachment downloads.
+The Oracle image includes pinned `gh-image` v1.4.0; Mac workers need v1.4.0 or
+later as a `gh-image` binary on PATH or the installed `drogers0/gh-image` extension. The uploader uses
+the dedicated GitHub login internally. Token extraction, explicit session-token
+flags, and nested command passthrough are blocked. Upload images separately and
+include the returned Markdown in PR or issue bodies with ordinary `gh` commands.
+
+The owner can authorize merging and deployment together in the initial request;
+that authorization carries into task continuations. Verify the PR has merged
+before deploying. For the configured MiniSago repository, development turns use
+`deploy_minisago` with the full merged commit SHA when `MINISAGO_DEPLOY_SOCKET`
+is configured. The tool works from the prepared feature checkout. Acceptance
+queues deployment; the host reports the final result in the Discord thread.
+
 Coding tasks can include image evidence in their final answer using Markdown such
 as `![After](</absolute/path/to/screenshot.png>)`. The host uploads local PNG, JPEG,
 GIF, and WebP images as native Discord attachments and preserves their captions.

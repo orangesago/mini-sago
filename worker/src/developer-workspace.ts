@@ -1,6 +1,7 @@
-import { access, chmod, mkdir, rm } from "node:fs/promises";
+import { access, chmod, constants, mkdir, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 
 import type { OracleAnswerJob } from "../../contracts/worker-contract";
 
@@ -34,6 +35,23 @@ deny() {
 command="\${1:-}"
 subcommand="\${2:-}"
 case "$command:$subcommand" in
+  image:*)
+    shift
+    for argument in "$@"; do
+      case "$argument" in
+        extract-token|check-token|--token|--token=*|--) deny ;;
+      esac
+    done
+    [ -n "$MINISAGO_GH_IMAGE" ] || {
+      echo "gh image is not installed on this worker." >&2
+      exit 127
+    }
+    # The trusted uploader needs gh auth token internally. Do not expose that
+    # command to task shells or allow image's nested gh-command passthrough.
+    PATH="$(dirname "$MINISAGO_REAL_GH"):/usr/bin:/bin"
+    export PATH
+    exec "$MINISAGO_GH_IMAGE" "$@"
+    ;;
   api:*)
     [ "$subcommand" != "graphql" ] || deny
     for argument in "$@"; do
@@ -98,6 +116,30 @@ function safeJobId(jobId: string) {
     throw new Error("Developer job ID is not filesystem-safe.");
   }
   return jobId;
+}
+
+async function githubImagePath() {
+  const candidates = [
+    Bun.which("gh-image"),
+    join(
+      process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
+      "gh",
+      "extensions",
+      "gh-image",
+      "gh-image",
+    ),
+  ];
+  for (const path of candidates) {
+    if (
+      path &&
+      (await access(path, constants.X_OK).then(
+        () => true,
+        () => false,
+      ))
+    )
+      return path;
+  }
+  return undefined;
 }
 
 export function developerBranchName(workspaceId: string) {
@@ -249,11 +291,13 @@ export async function prepareDeveloperWorkspace(
   ]);
   await Promise.all([chmod(ghWrapper, 0o700), chmod(gitWrapper, 0o700)]);
 
+  const imagePath = await githubImagePath();
   const environment = {
     ...preparationEnvironment,
     MINISAGO_GIT_BRANCH: branch,
     MINISAGO_REAL_GH: Bun.which("gh") || "/usr/bin/gh",
     MINISAGO_REAL_GIT: Bun.which("git") || "/usr/bin/git",
+    MINISAGO_GH_IMAGE: imagePath || "",
     PATH: `${binDirectory}:${process.env.PATH || "/usr/bin:/bin"}`,
   };
 
@@ -266,6 +310,7 @@ export async function prepareDeveloperWorkspace(
       binDirectory,
       resolve(options.githubConfigDir),
       attachmentsDirectory,
+      ...(imagePath ? [imagePath] : []),
     ],
     sandboxWritePaths: [resolve(directory, ".git"), temporaryDirectory],
     // Persistent tasks are explicitly retained; an idle timer must never erase dirty work.
