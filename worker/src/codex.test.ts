@@ -367,7 +367,7 @@ describe("Codex chatbot runner", () => {
     );
   });
 
-  test("uses GPT-6.1 Sol medium for chat and xhigh for owner dev work", () => {
+  test("uses GPT-6.1 Sol medium for chat and high for owner dev work", () => {
     expect(CHATBOT_MODEL_VERBOSITY).toBe("medium");
     expect(COMMUNITY_CHATBOT_PROFILE).toEqual({
       model: "gpt-6.1-sol",
@@ -375,7 +375,7 @@ describe("Codex chatbot runner", () => {
     });
     expect(OWNER_CHATBOT_PROFILE).toEqual({
       model: "gpt-6.1-sol",
-      reasoningEffort: "xhigh",
+      reasoningEffort: "high",
     });
     expect(VOICE_CHATBOT_PROFILE).toEqual({
       model: "gpt-6-luna",

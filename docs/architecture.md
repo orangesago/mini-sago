@@ -72,7 +72,7 @@ routing, evidence retrieval, and answering unless its required profile changes.
 
 Community and owner chat use GPT-6.1 Sol with medium reasoning. The owner router,
 voice chat, and social actions use GPT-6 Luna with low reasoning; selected
-development work uses GPT-6.1 Sol with xhigh reasoning. Ordinary stages have a
+development work uses GPT-6.1 Sol with high reasoning. Ordinary stages have a
 two-minute timeout. Owner development answers have no fixed job deadline and
 run until completion, cancellation, or worker disconnection.
 
