@@ -102,7 +102,7 @@ export const VOICE_CHATBOT_PROFILE = {
 } as const;
 export const OWNER_CHATBOT_PROFILE = {
   model: "gpt-6.1-sol",
-  reasoningEffort: "xhigh",
+  reasoningEffort: "high",
 } as const;
 export const OWNER_ROUTER_PROFILE = {
   model: "gpt-6-luna",
