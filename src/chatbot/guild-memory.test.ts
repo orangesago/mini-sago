@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -28,6 +35,67 @@ async function store() {
 }
 
 describe("GuildMemoryStore", () => {
+  test("initializes an empty private Markdown file once, then accepts its first fact", async () => {
+    const memory = await store();
+    expect(await memory.ensure(guildId)).toEqual({ revision: 0, entries: [] });
+    const path = join(memory.directory, `${guildId}.md`);
+    const original = await readFile(path, "utf8");
+    expect(original).toContain(`guild_id=${guildId}; revision=0;`);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    await memory.ensure(guildId);
+    expect(await readFile(path, "utf8")).toBe(original);
+    const log = Bun.spawnSync(["git", "log", "--format=%s"], {
+      cwd: memory.directory,
+    });
+    expect(log.stdout.toString().trim()).toBe(
+      `chore(memory): initialize ${guildId}`,
+    );
+    await memory.mutate(
+      guildId,
+      { action: "add", content: "大家說的允通常是允成" },
+      messageId,
+      ownerId,
+    );
+    const saved = await readFile(path, "utf8");
+    expect(await memory.ensure(guildId)).toMatchObject({
+      revision: 1,
+      entries: [{ content: "大家說的允通常是允成" }],
+    });
+    expect(await readFile(path, "utf8")).toBe(saved);
+  });
+
+  test("serializes startup initialization, join initialization, and a first save", async () => {
+    const memory = await store();
+    await Promise.all([
+      memory.ensure(guildId),
+      memory.mutate(
+        guildId,
+        { action: "add", content: "大家說的允通常是允成" },
+        messageId,
+        ownerId,
+      ),
+      memory.ensure(guildId),
+    ]);
+    expect(await memory.load(guildId)).toMatchObject({
+      revision: 1,
+      entries: [{ content: "大家說的允通常是允成" }],
+    });
+  });
+
+  test("preserves malformed existing files and can initialize another guild afterward", async () => {
+    const memory = await store();
+    const path = join(memory.directory, `${guildId}.md`);
+    await writeFile(path, "unexpected existing memory");
+    await expect(memory.ensure(guildId)).rejects.toThrow(
+      "Invalid server memory file",
+    );
+    expect(await readFile(path, "utf8")).toBe("unexpected existing memory");
+    expect(await memory.ensure("917436845187563610")).toEqual({
+      revision: 0,
+      entries: [],
+    });
+  });
+
   test("stores readable Markdown and commits it to a local-only repository", async () => {
     const memory = await store();
     const result = await memory.mutate(

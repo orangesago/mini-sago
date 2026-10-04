@@ -1,5 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { basename, join } from "node:path";
 
 export const GUILD_MEMORY_MAX_CHARACTERS = 4_000;
@@ -163,6 +171,45 @@ export class GuildMemoryStore {
     }
   }
 
+  ensure(guildId: string): Promise<GuildMemorySnapshot> {
+    assertSnowflake(guildId, "Guild ID");
+    const operation = this.mutationQueue.then(() =>
+      this.performEnsure(guildId),
+    );
+    this.mutationQueue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  private async performEnsure(guildId: string): Promise<GuildMemorySnapshot> {
+    const path = this.path(guildId);
+    try {
+      return parseSnapshot(guildId, await readFile(path, "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    await this.ensureLocalRepository();
+    const snapshot = { revision: 0, entries: [] };
+    const temporaryPath = `${path}.${randomBytes(6).toString("hex")}.tmp`;
+    await writeFile(
+      temporaryPath,
+      renderSnapshot(guildId, snapshot, this.now().toISOString()),
+      { encoding: "utf8", mode: 0o600, flag: "wx" },
+    );
+    try {
+      // Publish the complete file without replacing concurrently saved memory.
+      await link(temporaryPath, path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      return this.load(guildId);
+    } finally {
+      await unlink(temporaryPath);
+    }
+    await this.commitFile(path, `chore(memory): initialize ${guildId}`);
+    return snapshot;
+  }
+
   mutate(
     guildId: string,
     mutation: GuildMemoryMutation,
@@ -285,6 +332,14 @@ export class GuildMemoryStore {
     updatedBy: string,
     evidenceMessageId: string,
   ) {
+    await this.commitFile(
+      path,
+      `chore(memory): ${action} ${entryId}`,
+      `updated_by=${updatedBy}\nevidence_message=${evidenceMessageId}`,
+    );
+  }
+
+  private async commitFile(path: string, subject: string, body?: string) {
     const filename = basename(path);
     await runGit(this.directory, ["add", "--", filename]);
     await runGit(this.directory, [
@@ -295,9 +350,8 @@ export class GuildMemoryStore {
       "commit",
       "-q",
       "-m",
-      `chore(memory): ${action} ${entryId}`,
-      "-m",
-      `updated_by=${updatedBy}\nevidence_message=${evidenceMessageId}`,
+      subject,
+      ...(body ? ["-m", body] : []),
       "--",
       filename,
     ]);

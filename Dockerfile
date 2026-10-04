@@ -49,6 +49,7 @@ RUN apk add --no-cache ffmpeg libstdc++
 RUN bun install --frozen-lockfile --production
 
 COPY --from=builder --chown=bun:bun /app/src ./src
+COPY --from=builder --chown=bun:bun /app/scripts/backfill-guild-memory.ts ./scripts/backfill-guild-memory.ts
 COPY --from=builder --chown=bun:bun /app/contracts ./contracts
 COPY --from=builder --chown=bun:bun /app/tsconfig.json ./tsconfig.json
 COPY --from=speech-builder /out/whisper-server /usr/local/bin/whisper-server

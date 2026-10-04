@@ -125,6 +125,18 @@ directory is an independent local-only Git repository with no configured
 remote. Its files and Git history must never be committed to the application
 repository. Each guild file is capped at 4,000 characters.
 
+MiniSago automatically creates missing memory files for every joined server
+when the Gateway connects and whenever she joins a server. Server conversations
+also ensure their file exists. Existing entries and revisions are preserved;
+new files start empty and acquire facts through the server-bound memory tool.
+This does not change which members or channels can use the chatbot.
+
+To reconcile all current servers manually, run `bun run memory:backfill` in the
+core service environment with `DISCORD_BOT_TOKEN` and the persistent
+`MINISAGO_GUILD_MEMORY_DIRECTORY` configured. The command paginates the bot's
+server list, preserves existing files, and reports any failed server IDs with
+a nonzero exit status.
+
 Production recovery uses a separate private `minisago-state` repository. Its
 backup job reads memory and history without adding a remote to the live memory
 repository. See [backup and restore](operations.md#durable-state-backup-and-restore).
