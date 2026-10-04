@@ -1,3 +1,4 @@
+import { getGuildMemoryStore } from "../chatbot/guild-memory";
 import { routeWithJev } from "../chatbot/jev-routing";
 import { handleCalendarConfirmation } from "../chatbot/calendar-confirmation";
 import {
@@ -78,6 +79,7 @@ type GatewayHello = {
 
 type GatewayReady = {
   session_id: string;
+  guilds?: Array<{ id: string }>;
   resume_gateway_url?: string;
   user?: {
     id?: string;
@@ -394,6 +396,9 @@ class InstagramGatewayClient implements VoiceGateway {
       this.botUserId = ready.user?.id ?? null;
       this.reconnectAttempts = 0;
       console.log("Discord gateway ready.");
+      for (const guild of ready.guilds ?? []) {
+        void this.ensureGuildMemory(guild.id);
+      }
       return;
     }
 
@@ -406,6 +411,7 @@ class InstagramGatewayClient implements VoiceGateway {
     if (payload.t === "GUILD_CREATE") {
       const guild = payload.d as GatewayGuildCreate;
       this.voiceStates.replaceGuild(guild.id, guild.voice_states ?? []);
+      void this.ensureGuildMemory(guild.id);
       return;
     }
 
@@ -444,6 +450,16 @@ class InstagramGatewayClient implements VoiceGateway {
     if (payload.t === "INTERACTION_CREATE") {
       await this.handleInteractionCreate(
         payload.d as DiscordApplicationCommandInteraction,
+      );
+    }
+  }
+
+  private async ensureGuildMemory(guildId: string) {
+    try {
+      await getGuildMemoryStore().ensure(guildId);
+    } catch {
+      console.warn(
+        `Discord server memory initialization failed for ${guildId}.`,
       );
     }
   }

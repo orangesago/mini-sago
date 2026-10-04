@@ -1258,7 +1258,7 @@ export async function handleChatbotMention({
       if (message.guild_id) {
         try {
           const snapshot = await clock.span("host.guild_memory", () =>
-            guildMemoryStore.load(message.guild_id!),
+            guildMemoryStore.ensure(message.guild_id!),
           );
           if (snapshot.entries.length) {
             serverMemory = {

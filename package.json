@@ -16,6 +16,7 @@
     "format:check": "prettier . --check",
     "fetch:vocab": "bun scripts/fetch-wiktionary-vocab.mjs",
     "sync:install": "bun --env-file=.env.local scripts/sync-install-settings.mjs",
+    "memory:backfill": "bun scripts/backfill-guild-memory.ts",
     "mac-agent:install": "bun --env-file=.env.local scripts/worker.mjs install",
     "mac-agent:status": "bun scripts/worker.mjs status",
     "mac-agent:uninstall": "bun scripts/worker.mjs uninstall",
