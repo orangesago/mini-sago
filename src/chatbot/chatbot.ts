@@ -27,7 +27,7 @@ import {
   createTripPlannerClient,
   tripPlannerAvailableForGuild,
 } from "./trip-planner";
-import { getGuildMemoryStore } from "./guild-memory";
+import { getGuildMemoryStore, type GuildMemoryStore } from "./guild-memory";
 import type {
   ChatbotCapability,
   ChatbotFailureKind,
@@ -121,7 +121,6 @@ const DISCORD_MESSAGE_LIMIT = 2_000;
 const TYPING_REFRESH_MS = 8_000;
 const ACTIVE_CONVERSATION_TTL_MS = 90_000;
 const DEVELOPER_TASK_TTL_MS = 3 * 24 * 60 * 60_000;
-const guildMemoryStore = getGuildMemoryStore();
 const serviceSubscriptionStore = getServiceSubscriptionStore();
 const webhookLoops = new WebhookLoopTracker();
 
@@ -1098,6 +1097,7 @@ export async function handleChatbotMention({
   receivedSequence,
   invocation,
   featureAvailability,
+  guildMemoryStore = getGuildMemoryStore(),
   executionOptions = {},
 }: {
   message: ChatbotMention;
@@ -1111,6 +1111,7 @@ export async function handleChatbotMention({
   receivedSequence?: number;
   invocation?: ChatbotInvocation;
   featureAvailability?: FeatureAvailabilityStore;
+  guildMemoryStore?: Pick<GuildMemoryStore, "ensure" | "mutate">;
   executionOptions?: ChatbotExecutionOptions;
 }) {
   const clock = timing(executionOptions.onTiming);
@@ -1208,6 +1209,7 @@ export async function handleChatbotMention({
   const { workflow } = acquired;
   let result: MacAgentJobResult;
   let deferredDeveloperTask = false;
+  let savedMemoryAction: "add" | "replace" | "remove" | undefined;
   let mcpSession: ReturnType<typeof registerChatbotMcpSession> | undefined;
   let mcpSnapshot: ChatbotMcpSessionSnapshot = {
     searchUnavailable: false,
@@ -1624,6 +1626,7 @@ export async function handleChatbotMention({
                   message.id,
                   requesterUserId,
                 );
+                savedMemoryAction = result.action;
                 return {
                   revision: result.revision,
                   action: result.action,
@@ -1944,6 +1947,17 @@ export async function handleChatbotMention({
     reacted ||= decision.reacted;
   } else {
     reply = chatbotFailureReply(result.failureKind);
+  }
+
+  if (
+    savedMemoryAction &&
+    (!result.ok || (!reply && !reacted && files.length === 0))
+  ) {
+    reply = {
+      add: "我已記住這個伺服器的資訊了",
+      replace: "我已更新這個伺服器的記憶了",
+      remove: "我已移除這筆伺服器記憶了",
+    }[savedMemoryAction];
   }
 
   if (mcpSnapshot.searchUnavailable && reply) {
