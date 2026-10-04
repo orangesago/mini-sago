@@ -10,6 +10,7 @@ import { enforceFirstPersonIdentity } from "../../contracts/answer-contract";
 import { ChatbotMediaRegistry } from "./media-assets";
 import { handleChatbotMcpRequest } from "./mcp";
 import { ChannelQuietTracker } from "../discord/channel-quiet";
+import { WebhookLoopTracker } from "./webhook-loop";
 import type { FeatureAvailabilityStore } from "../discord/feature-availability";
 import {
   addGuildExpressionForRequest,
@@ -1630,6 +1631,98 @@ describe("Discord chatbot", () => {
       },
     });
   });
+
+  test.each([true, false])(
+    "stops a webhook on its fifth addressed message until a human intervenes (authorized: %s)",
+    async (authorized) => {
+      const webhookLoopTracker = new WebhookLoopTracker();
+      const requests: string[] = [];
+      let sequence = 0;
+      const handle = (
+        changes: Partial<
+          Parameters<typeof handleChatbotMention>[0]["message"]
+        > = {},
+      ) =>
+        handleChatbotMention({
+          message: {
+            id: `webhook-message-${++sequence}`,
+            channel_id: "webhook-channel",
+            guild_id: authorized ? "917436845187563610" : "unregistered-guild",
+            content: `<@${BOT_ID}> 你說是吧`,
+            timestamp: "2026-10-04T07:26:47.596Z",
+            author: { id: "webhook-author", bot: true },
+            webhook_id: "webhook-1",
+            mentions: [{ id: BOT_ID }],
+            ...changes,
+          },
+          botUserId: BOT_ID,
+          accessConfig: ACCESS_CONFIG,
+          webhookLoopTracker,
+          discordRequest: async (path, options) => {
+            requests.push(path);
+            if (options?.method === "POST") return { id: "reply" } as never;
+            return [] as never;
+          },
+        });
+
+      // Unaddressed webhook messages do not consume the response allowance.
+      expect(await handle({ content: "旁邊聊天", mentions: [] })).toBe(false);
+      for (let index = 0; index < 4; index++) {
+        expect(await handle()).toBe(true);
+      }
+      expect(
+        requests.filter((path) => path.endsWith("/messages")),
+      ).toHaveLength(4);
+      requests.length = 0;
+      for (let index = 0; index < 3; index++) {
+        expect(await handle()).toBe(true);
+      }
+      expect(requests).toEqual([]);
+
+      // The block belongs to this webhook in this channel only.
+      expect(await handle({ webhook_id: "webhook-2" })).toBe(true);
+      expect(await handle({ channel_id: "another-channel" })).toBe(true);
+      expect(
+        requests.filter((path) => path.endsWith("/messages")),
+      ).toHaveLength(2);
+
+      // Bot messages and webhook messages with no bot flag cannot reset it.
+      expect(
+        await handle({
+          webhook_id: undefined,
+          author: { id: BOT_ID, bot: true },
+        }),
+      ).toBe(false);
+      expect(
+        await handle({
+          webhook_id: undefined,
+          author: { id: "other-bot", bot: true },
+        }),
+      ).toBe(true);
+      requests.length = 0;
+      expect(await handle({ author: { id: "webhook-author" } })).toBe(true);
+      expect(requests).toEqual([]);
+
+      // Even an unmentioned human message starts a new conversation.
+      expect(
+        await handle({
+          webhook_id: undefined,
+          author: { id: "human" },
+          content: "換個話題",
+          mentions: [],
+        }),
+      ).toBe(false);
+      for (let index = 0; index < 4; index++) {
+        expect(await handle()).toBe(true);
+      }
+      expect(
+        requests.filter((path) => path.endsWith("/messages")),
+      ).toHaveLength(4);
+      requests.length = 0;
+      expect(await handle()).toBe(true);
+      expect(requests).toEqual([]);
+    },
+  );
 
   test("ignores MiniSago's own messages", async () => {
     const handled = await handleChatbotMention({
