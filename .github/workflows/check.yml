@@ -34,7 +34,7 @@ jobs:
           bun-version: 1.3.9
       - run: bun install --frozen-lockfile
       - run: bun install --cwd worker --frozen-lockfile
-      - run: bun test src/chatbot/chatbot.test.ts src/chatbot/bridge.test.ts src/chatbot/media-assets.test.ts worker/src/developer-workspace.test.ts worker/src/developer-runtime.test.ts worker/src/deployment-mcp.test.ts worker/src/codex-app-server.test.ts worker/src/codex.test.ts worker/src/codex-developer.test.ts worker/src/codex-warm.test.ts worker/src/trace-store.test.ts worker/src/media/attachments.test.ts worker/src/media/media.test.ts worker/src/media/media-mcp.test.ts worker/src/media/outgoing-files.test.ts
+      - run: bun test src/chatbot/chatbot.test.ts src/chatbot/guild-memory.test.ts src/chatbot/guild-memory-sync.test.ts src/chatbot/guild-memory-conversation.test.ts src/chatbot/bridge.test.ts src/chatbot/media-assets.test.ts worker/src/developer-workspace.test.ts worker/src/developer-runtime.test.ts worker/src/deployment-mcp.test.ts worker/src/codex-app-server.test.ts worker/src/codex.test.ts worker/src/codex-developer.test.ts worker/src/codex-warm.test.ts worker/src/trace-store.test.ts worker/src/media/attachments.test.ts worker/src/media/media.test.ts worker/src/media/media-mcp.test.ts worker/src/media/outgoing-files.test.ts
       - run: sudo apparmor_parser -r scripts/test-fixtures/worker-security/minisago-worker.apparmor
       - run: bash scripts/test-dev-sandbox.sh
 
