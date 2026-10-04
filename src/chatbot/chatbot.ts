@@ -1,4 +1,5 @@
 import { createCcxpSyncClient } from "./ccxp-sync";
+import { WebhookLoopTracker } from "./webhook-loop";
 import { createCcxpMeetingsClient } from "./ccxp-meetings";
 import { timing, type TimingSink } from "../observability/timing";
 import { withCalendarConfirmation } from "./calendar-confirmation";
@@ -122,6 +123,7 @@ const ACTIVE_CONVERSATION_TTL_MS = 90_000;
 const DEVELOPER_TASK_TTL_MS = 3 * 24 * 60 * 60_000;
 const guildMemoryStore = getGuildMemoryStore();
 const serviceSubscriptionStore = getServiceSubscriptionStore();
+const webhookLoops = new WebhookLoopTracker();
 
 export function chatbotFailureReply(kind: ChatbotFailureKind) {
   if (kind === "unavailable") {
@@ -1092,6 +1094,7 @@ export async function handleChatbotMention({
   reactionBroker,
   conversationTracker,
   quietTracker,
+  webhookLoopTracker = webhookLoops,
   receivedSequence,
   invocation,
   featureAvailability,
@@ -1104,6 +1107,7 @@ export async function handleChatbotMention({
   reactionBroker?: DiscordReactionBroker;
   conversationTracker?: ChatbotConversationTracker;
   quietTracker?: ChannelQuietTracker;
+  webhookLoopTracker?: WebhookLoopTracker;
   receivedSequence?: number;
   invocation?: ChatbotInvocation;
   featureAvailability?: FeatureAvailabilityStore;
@@ -1126,9 +1130,11 @@ export async function handleChatbotMention({
           executionOptions.latestMessageId,
         );
 
-  if (!requesterUserId || requesterUserId === botUserId || message.webhook_id) {
+  if (!requesterUserId || requesterUserId === botUserId) {
     return false;
   }
+
+  webhookLoopTracker.observe(message, botUserId);
 
   if (!invocation && developerTasks.has(message.channel_id)) {
     return developerTasks.handle(message, botUserId, accessConfig);
@@ -1165,6 +1171,8 @@ export async function handleChatbotMention({
       return false;
     }
 
+    if (!webhookLoopTracker.allowResponse(message)) return true;
+
     const content = `在這個伺服器裡我暫時只聽 <@${accessConfig.ownerUserId}> 的 抱歉啦`;
     await respond(content);
     return true;
@@ -1180,6 +1188,8 @@ export async function handleChatbotMention({
       return true;
     }
   }
+
+  if (!webhookLoopTracker.allowResponse(message)) return true;
 
   const acquired = macAgentBridge.acquireWorkflow();
 
