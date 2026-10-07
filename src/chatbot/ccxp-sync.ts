@@ -21,6 +21,7 @@ export function createCcxpSyncClient(
   env: Record<string, string | undefined>,
   context: {
     guildId?: string;
+    roleIds?: readonly string[];
     requesterId: string;
     ownerId: string;
     messageId: string;
@@ -35,7 +36,10 @@ export function createCcxpSyncClient(
       context.ownerId &&
       context.requesterId === context.ownerId &&
       context.guildId &&
-      availability.isEnabled("ccxp_meetings", { guildId: context.guildId }),
+      availability.isEnabled("ccxp_meetings", {
+        guildId: context.guildId,
+        roleIds: context.roleIds,
+      }),
     );
   if (
     !allowed() ||

@@ -52,7 +52,7 @@ type PageRow = {
 
 export function createCcxpMeetingsClient(
   env: Record<string, string | undefined>,
-  context: { guildId?: string },
+  context: { guildId?: string; roleIds?: readonly string[] },
   availability: Pick<
     FeatureAvailabilityStore,
     "isEnabled"
@@ -60,7 +60,13 @@ export function createCcxpMeetingsClient(
 ) {
   const guildId = context.guildId;
   const isRegistered = () =>
-    Boolean(guildId && availability.isEnabled("ccxp_meetings", { guildId }));
+    Boolean(
+      guildId &&
+      availability.isEnabled("ccxp_meetings", {
+        guildId,
+        roleIds: context.roleIds,
+      }),
+    );
   if (!isRegistered() || !env.MINISAGO_CCXP_INDEX_PATH) return undefined;
   const path = env.MINISAGO_CCXP_INDEX_PATH;
   return {

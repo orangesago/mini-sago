@@ -4,6 +4,7 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { TARGET_GUILD_ID } from "./config";
+import { CALENDAR_GUILD_ID } from "../chatbot/calendar-settings";
 
 export const SCOPED_FEATURE_DEFINITIONS = {
   chatbot: "Answer mentions and /ask requests from non-owner members.",
@@ -11,13 +12,24 @@ export const SCOPED_FEATURE_DEFINITIONS = {
   trip_planner: "Expose the shared Kyushu itinerary tools.",
   ccxp_meetings:
     "Search protected NTHU meeting records during related discussions. Owner registration is guild-only; requires a configured CCXP index.",
+  calendar:
+    "Expose Calendar tools in registered guilds, subject to optional role filters; requires configured Google credentials.",
   developer_steering:
     "Let non-owner humans steer existing coding tasks. Requires explicit guild registration; the owner can steer everywhere.",
 } as const;
 
 export type ScopedFeatureId = keyof typeof SCOPED_FEATURE_DEFINITIONS;
 export type FeatureScope = "guild" | "channel";
-export type FeatureRule = {
+export type FeatureContext = {
+  guildId?: string;
+  channelId?: string;
+  roleIds?: readonly string[];
+};
+export type FeatureRoleFilters = {
+  allowRoleIds?: string[];
+  denyRoleIds?: string[];
+};
+export type FeatureRule = FeatureRoleFilters & {
   scope: FeatureScope;
   targetId: string;
   enabled: boolean;
@@ -30,7 +42,7 @@ export type FeatureAvailabilitySnapshot = {
   version: 1;
   features: Record<ScopedFeatureId, FeaturePolicy>;
 };
-export type FeatureAvailabilityMutation = {
+export type FeatureAvailabilityMutation = FeatureRoleFilters & {
   feature: ScopedFeatureId;
   scope: FeatureScope;
   targetId: string;
@@ -85,6 +97,24 @@ export function defaultFeatureAvailability(
           "1000249491494019092",
         ]),
       },
+      calendar: {
+        defaultEnabled: false,
+        rules: [
+          ...enabledRules(
+            "guild",
+            [environment.DISCORD_CALENDAR_GUILD_ID || CALENDAR_GUILD_ID].filter(
+              (id) => id !== "1394943277836402779",
+            ),
+          ),
+          // Owner-approved registration; applied once when upgrading legacy state.
+          {
+            scope: "guild",
+            targetId: "1394943277836402779",
+            enabled: true,
+            allowRoleIds: ["1394944058534920213"],
+          },
+        ],
+      },
       developer_steering: {
         defaultEnabled: false,
         rules: enabledRules("guild", ["1521168712579682567"]),
@@ -93,7 +123,37 @@ export function defaultFeatureAvailability(
   };
 }
 
-function assertSnapshot(value: unknown): FeatureAvailabilitySnapshot {
+function validRoleIds(value: unknown) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length <= 250 &&
+      value.every((id) => typeof id === "string" && DISCORD_SNOWFLAKE.test(id)))
+  );
+}
+
+function rolesAllowed(rule: FeatureRule, context: FeatureContext) {
+  // Unknown membership cannot safely satisfy a denylist either.
+  const filtered = Boolean(
+    rule.allowRoleIds?.length || rule.denyRoleIds?.length,
+  );
+  if (filtered && (!context.guildId || context.roleIds === undefined))
+    return false;
+  const roles = new Set([context.guildId, ...(context.roleIds ?? [])]);
+  if (rule.denyRoleIds?.some((id) => roles.has(id))) return false;
+  return (
+    !rule.allowRoleIds?.length || rule.allowRoleIds.some((id) => roles.has(id))
+  );
+}
+
+function guildOnly(feature: ScopedFeatureId) {
+  return ["ccxp_meetings", "developer_steering", "calendar"].includes(feature);
+}
+
+function assertSnapshot(
+  value: unknown,
+  environment: NodeJS.ProcessEnv,
+): FeatureAvailabilitySnapshot {
   if (!value || typeof value !== "object") {
     throw new Error("Feature availability must be a JSON object.");
   }
@@ -113,6 +173,10 @@ function assertSnapshot(value: unknown): FeatureAvailabilitySnapshot {
       {},
     ).features.developer_steering;
   }
+  if (snapshot.features.calendar === undefined) {
+    snapshot.features.calendar =
+      defaultFeatureAvailability(environment).features.calendar;
+  }
   for (const feature of Object.keys(
     SCOPED_FEATURE_DEFINITIONS,
   ) as ScopedFeatureId[]) {
@@ -126,13 +190,15 @@ function assertSnapshot(value: unknown): FeatureAvailabilitySnapshot {
         (rule) =>
           !["guild", "channel"].includes(rule.scope) ||
           !DISCORD_SNOWFLAKE.test(rule.targetId) ||
-          typeof rule.enabled !== "boolean",
+          typeof rule.enabled !== "boolean" ||
+          !validRoleIds(rule.allowRoleIds) ||
+          !validRoleIds(rule.denyRoleIds),
       )
     ) {
       throw new Error(`Feature availability has invalid ${feature} rules.`);
     }
     if (
-      (feature === "ccxp_meetings" || feature === "developer_steering") &&
+      guildOnly(feature) &&
       (policy.defaultEnabled ||
         policy.rules.some((rule) => rule.scope !== "guild"))
     ) {
@@ -159,7 +225,7 @@ export class FeatureAvailabilityStore {
     environment: NodeJS.ProcessEnv = process.env,
   ) {
     this.snapshot = existsSync(filePath)
-      ? assertSnapshot(JSON.parse(readFileSync(filePath, "utf8")))
+      ? assertSnapshot(JSON.parse(readFileSync(filePath, "utf8")), environment)
       : defaultFeatureAvailability(environment);
   }
 
@@ -167,15 +233,8 @@ export class FeatureAvailabilityStore {
     return copySnapshot(this.snapshot);
   }
 
-  isEnabled(
-    feature: ScopedFeatureId,
-    context: { guildId?: string; channelId?: string },
-  ) {
-    if (
-      (feature === "ccxp_meetings" || feature === "developer_steering") &&
-      !context.guildId
-    )
-      return false;
+  isEnabled(feature: ScopedFeatureId, context: FeatureContext) {
+    if (guildOnly(feature) && !context.guildId) return false;
     const policy = this.snapshot.features[feature];
     const channelRule = context.channelId
       ? policy.rules.find(
@@ -183,24 +242,38 @@ export class FeatureAvailabilityStore {
             rule.scope === "channel" && rule.targetId === context.channelId,
         )
       : undefined;
-    if (channelRule) return channelRule.enabled;
+    if (channelRule)
+      return channelRule.enabled && rolesAllowed(channelRule, context);
 
     const guildRule = context.guildId
       ? policy.rules.find(
           (rule) => rule.scope === "guild" && rule.targetId === context.guildId,
         )
       : undefined;
-    return guildRule?.enabled ?? policy.defaultEnabled;
+    return guildRule
+      ? guildRule.enabled && rolesAllowed(guildRule, context)
+      : policy.defaultEnabled;
   }
 
   configure(input: FeatureAvailabilityMutation): Promise<FeaturePolicy> {
-    if (
-      (input.feature === "ccxp_meetings" ||
-        input.feature === "developer_steering") &&
-      input.scope !== "guild"
-    ) {
+    if (guildOnly(input.feature) && input.scope !== "guild") {
       return Promise.reject(
         new Error(`${input.feature} registration requires guild scope.`),
+      );
+    }
+    if (!validRoleIds(input.allowRoleIds) || !validRoleIds(input.denyRoleIds)) {
+      return Promise.reject(
+        new Error(
+          "Role filters must contain valid Discord role IDs (at most 250 each).",
+        ),
+      );
+    }
+    if (
+      input.action !== "enable" &&
+      (input.allowRoleIds?.length || input.denyRoleIds?.length)
+    ) {
+      return Promise.reject(
+        new Error("Role filters apply only to enabled registrations."),
       );
     }
     if (!DISCORD_SNOWFLAKE.test(input.targetId)) {
@@ -219,6 +292,12 @@ export class FeatureAvailabilityStore {
           scope: input.scope,
           targetId: input.targetId,
           enabled: input.action === "enable",
+          ...(input.allowRoleIds?.length
+            ? { allowRoleIds: [...new Set(input.allowRoleIds)].sort() }
+            : {}),
+          ...(input.denyRoleIds?.length
+            ? { denyRoleIds: [...new Set(input.denyRoleIds)].sort() }
+            : {}),
         });
       }
       policy.rules.sort((left, right) =>

@@ -88,9 +88,10 @@ import {
   isChannelQuietRequest,
   isChannelWakeRequest,
 } from "../discord/channel-quiet";
-import type {
-  FeatureAvailabilityMutation,
-  FeatureAvailabilityStore,
+import {
+  getFeatureAvailabilityStore,
+  type FeatureAvailabilityMutation,
+  type FeatureAvailabilityStore,
 } from "../discord/feature-availability";
 import {
   formatManagedServices,
@@ -425,11 +426,16 @@ export function isChatbotAuthorized(
   guildId?: string,
   channelId?: string,
   featureAvailability?: FeatureAvailabilityStore,
+  roleIds?: readonly string[],
 ) {
   return (
     userId === accessConfig.ownerUserId ||
     (featureAvailability
-      ? featureAvailability.isEnabled("chatbot", { guildId, channelId })
+      ? featureAvailability.isEnabled("chatbot", {
+          guildId,
+          channelId,
+          roleIds,
+        })
       : (guildId !== undefined && accessConfig.guildIds.has(guildId)) ||
         (channelId !== undefined && accessConfig.channelIds.has(channelId)))
   );
@@ -604,7 +610,7 @@ type DeveloperTask = {
   threadId: string;
   requesterUserId: string;
   repository: string;
-  allowParticipantSteering: () => boolean;
+  allowParticipantSteering: (message: DiscordMessage) => boolean;
   request: string;
   job: OracleAnswerJob;
   workflow?: WorkflowLease;
@@ -676,7 +682,7 @@ class DeveloperTaskRegistry {
       return false;
     if (
       message.author.id !== task.requesterUserId &&
-      !task.allowParticipantSteering()
+      !task.allowParticipantSteering(message)
     )
       return false;
     const addressingMode = chatbotAddressingMode(
@@ -1166,6 +1172,7 @@ export async function handleChatbotMention({
       message.guild_id,
       message.channel_id,
       featureAvailability,
+      message.member?.roles,
     )
   ) {
     if (!message.guild_id) {
@@ -1224,6 +1231,7 @@ export async function handleChatbotMention({
           ? featureAvailability.isEnabled(feature, {
               guildId: message.guild_id,
               channelId: message.channel_id,
+              roleIds: message.member?.roles,
             })
           : feature === "trip_planner"
             ? tripPlannerAvailableForGuild(message.guild_id)
@@ -1385,10 +1393,25 @@ export async function handleChatbotMention({
         ? createTripPlannerClient(process.env, `minisago-${message.id}`)
         : undefined;
 
-      const calendar = createGoogleCalendarClient(process.env, {
+      const calendarContext = {
         guildId: message.guild_id,
+        channelId: message.channel_id,
+        roleIds: message.member?.roles,
         messageId: message.id,
-      });
+        resolveRoleIds: async () =>
+          (
+            await resolveDriveRequester(
+              { guildId: message.guild_id!, requesterId: requesterUserId },
+              discordRequest,
+            )
+          ).roleIds,
+      };
+      const calendar = createGoogleCalendarClient(
+        process.env,
+        calendarContext,
+        fetch,
+        featureAvailability,
+      );
       const drive = createGoogleDriveClient(
         process.env,
         {
@@ -1406,7 +1429,7 @@ export async function handleChatbotMention({
       );
       const ccxpMeetings = createCcxpMeetingsClient(
         process.env,
-        { guildId: message.guild_id },
+        { guildId: message.guild_id, roleIds: message.member?.roles },
         featureAvailability,
       );
       const ccxpSync = createCcxpSyncClient(
@@ -1416,6 +1439,7 @@ export async function handleChatbotMention({
           requesterId: requesterUserId,
           ownerId: accessConfig.ownerUserId,
           messageId: message.id,
+          roleIds: message.member?.roles,
         },
         featureAvailability,
       );
@@ -1435,6 +1459,18 @@ export async function handleChatbotMention({
                   requesterId: requesterUserId,
                 },
                 discordRequest,
+                async () => {
+                  try {
+                    return (
+                      featureAvailability ?? getFeatureAvailabilityStore()
+                    ).isEnabled("calendar", {
+                      ...calendarContext,
+                      roleIds: await calendarContext.resolveRoleIds(),
+                    });
+                  } catch {
+                    return false;
+                  }
+                },
               ),
             }
           : {}),
@@ -1554,11 +1590,31 @@ export async function handleChatbotMention({
               configureFeatureAvailability: async (
                 input: FeatureAvailabilityMutation,
               ) => {
-                await discordRequest(
+                const target = await discordRequest<{ guild_id?: string }>(
                   input.scope === "channel"
                     ? `/channels/${input.targetId}`
                     : `/guilds/${input.targetId}`,
                 );
+                const filters = [
+                  ...(input.allowRoleIds ?? []),
+                  ...(input.denyRoleIds ?? []),
+                ];
+                if (filters.length) {
+                  const guildId =
+                    input.scope === "guild" ? input.targetId : target.guild_id;
+                  if (!guildId)
+                    throw new Error("Role filters require a guild channel.");
+                  const roles = await discordRequest<Array<{ id: string }>>(
+                    `/guilds/${guildId}/roles`,
+                  );
+                  if (
+                    filters.some((id) => !roles.some((role) => role.id === id))
+                  ) {
+                    throw new Error(
+                      "Every role filter must belong to the target guild.",
+                    );
+                  }
+                }
                 return featureAvailability.configure(input);
               },
             }
@@ -1839,9 +1895,10 @@ export async function handleChatbotMention({
           threadId,
           requesterUserId,
           repository: job.repository,
-          allowParticipantSteering: () =>
+          allowParticipantSteering: (participant) =>
             featureAvailability?.isEnabled("developer_steering", {
               guildId: message.guild_id,
+              roleIds: participant.member?.roles,
             }) ?? false,
           request:
             recovered && !recovered.resumeSessionId

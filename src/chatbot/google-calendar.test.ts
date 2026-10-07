@@ -1,4 +1,5 @@
-import { generateKeyPairSync, verify } from "node:crypto";
+import { FeatureAvailabilityStore } from "../discord/feature-availability";
+import { randomUUID, generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import {
   CALENDAR_GUILD_ID,
@@ -501,6 +502,10 @@ function eventWorkflow(overrides: Record<string, string> = {}) {
       guildId: settings.DISCORD_CALENDAR_GUILD_ID || context.guildId,
     },
     request,
+    new FeatureAvailabilityStore(
+      `.data/calendar-test-${randomUUID()}.json`,
+      settings,
+    ),
   )!;
   return {
     client,
@@ -667,4 +672,51 @@ test("neutral settings work on a fork and never permit the office to be the writ
   const body = JSON.stringify([...f.stored.values()]);
   expect(body).toContain("discordCalendarFingerprint");
   expect(body).not.toContain("minisago");
+});
+
+test("calendar role filtering denies unknown members and rechecks fresh roles and revocation before Google access", async () => {
+  const guildId = "1394943277836402779";
+  const role = "1394944058534920213";
+  let roles = [role];
+  let enabled = true;
+  const availability = {
+    isEnabled: (_feature: string, context: { roleIds?: readonly string[] }) =>
+      enabled && Boolean(context.roleIds?.includes(role)),
+  };
+  const { request, calls } = fixture(() => json({ items: [] }));
+  expect(
+    createGoogleCalendarClient(
+      env,
+      { guildId, messageId: "1" },
+      request,
+      availability,
+    ),
+  ).toBeUndefined();
+  const client = createGoogleCalendarClient(
+    env,
+    {
+      guildId,
+      messageId: "1",
+      roleIds: roles,
+      resolveRoleIds: async () => roles,
+    },
+    request,
+    availability,
+  )!;
+  expect(client.config.guildId).toBe(guildId);
+  const input = { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" };
+  roles = [];
+  expect((await client.call("list_calendar_events", input)).status).toBe(
+    "forbidden",
+  );
+  roles = [role];
+  enabled = false;
+  expect((await client.call("create_calendar_event", creation)).status).toBe(
+    "forbidden",
+  );
+  expect(calls).toHaveLength(0);
+  enabled = true;
+  expect((await client.call("list_calendar_events", input)).status).toBe(
+    "complete",
+  );
 });

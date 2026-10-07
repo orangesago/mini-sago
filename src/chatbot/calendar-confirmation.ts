@@ -10,6 +10,9 @@ import {
   type GoogleCalendarClient,
 } from "./google-calendar";
 
+import { getFeatureAvailabilityStore } from "../discord/feature-availability";
+import { resolveDriveRequester } from "./drive-discord-access";
+
 const draftSchema = z.object({
   id: z.string(),
   guildId: z.string(),
@@ -132,11 +135,13 @@ export function withCalendarConfirmation(
   client: GoogleCalendarClient,
   context: Context,
   discord: DiscordRequest,
+  allowed: () => Promise<boolean> = async () =>
+    getFeatureAvailabilityStore().isEnabled("calendar", context),
 ): GoogleCalendarClient {
   return {
     config: client.config,
     async call(name, raw) {
-      if (context.guildId !== client.config.guildId)
+      if (context.guildId !== client.config.guildId || !(await allowed()))
         return {
           status: "unavailable",
           error: "Calendar access is unavailable here.",
@@ -347,7 +352,16 @@ export async function handleCalendarConfirmation(
     );
     const client = makeClient(env, {
       guildId: draft.guildId,
+      channelId: draft.channelId,
+      roleIds: interaction.member?.roles,
       messageId: draft.messageId,
+      resolveRoleIds: async () =>
+        (
+          await resolveDriveRequester(
+            { guildId: draft.guildId, requesterId: draft.requesterId },
+            discord,
+          )
+        ).roleIds,
     });
     const currentBinding = client
       ? createHash("sha256").update(JSON.stringify(client.config)).digest("hex")
@@ -357,7 +371,8 @@ export async function handleCalendarConfirmation(
         ? await client.call(draft.name, draft.input)
         : {
             status: "unavailable",
-            error: "Calendar configuration changed; prepare a new preview.",
+            error:
+              "Calendar access or configuration changed; prepare a new preview.",
           };
     const complete = result.status === "complete";
     const event = result.event as { htmlLink?: string } | undefined;

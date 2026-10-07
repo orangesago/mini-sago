@@ -179,21 +179,45 @@ fork. Its Google calendar and OAuth client are named **discord-calendar**.
 Deployments use the same code with host configuration; no bot display name is
 stored in events or confirmation previews.
 
+### Feature registrations and role filters
+
+The owner can configure feature coverage with `configure_feature_availability`.
+Each guild or channel registration accepts optional `allowRoleIds` and
+`denyRoleIds`. Both default to no filter. A nonempty allowlist requires at least
+one matching role; a matching denylist role always denies access. Unknown member
+roles fail closed when either filter is present. Discord's everyone role can be
+specified using the guild ID. Each enable replaces the filters; omit them or
+send empty arrays to remove filtering. Disable denies the whole scope; inherit
+removes that scope's rule. Filters are accepted only with enable.
+
+Channel rules take precedence over guild rules, including a filtered channel
+rule that denies a member. Calendar, CCXP, and developer steering require guild
+registrations and a disabled global default. Other features support both scopes.
+Existing rules retain their coverage without role filters.
+
+Calendar is now a registered feature. Legacy state gains the original configured
+Calendar guild and the owner-approved registration for guild
+`1394943277836402779`, restricted to role `1394944058534920213`, once. A saved
+Calendar policy, including a revocation, stays authoritative. Calendar access
+checks apply to reads, draft preparation, and confirmation; tool calls refresh
+Discord membership before using Google. DMs have no Calendar tools. Registered
+guilds share the configured event and office calendars.
+
 ### Calendar destinations
 
 Set these host-only values before deployment:
 
-| Setting                           | Purpose / default                                                                             |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `DISCORD_CALENDAR_ID`             | Required secondary calendar ID for event creation, edits and deletion. No fallback.           |
-| `DISCORD_CALENDAR_NAME`           | Preview label, default `discord-calendar`.                                                    |
-| `DISCORD_OFFICE_CALENDAR_ID`      | Read-only office calendar and optional invitation recipient; defaults to 學生會辦空間登記.    |
-| `DISCORD_CALENDAR_GUILD_ID`       | Allowed guild, default `1514899496797212683`; DMs and other guilds have no Calendar tools.    |
-| `DISCORD_CALENDAR_ACCOUNT`        | Verified OAuth user, default `nthusa@gapp.nthu.edu.tw`.                                       |
-| `DISCORD_CALENDAR_OAUTH_JSON`     | Host-only compact OAuth JSON; legacy `MINISAGO_GOOGLE_CALENDAR_OAUTH_JSON` remains supported. |
-| `DISCORD_CALENDAR_DRAFTS_FILE`    | Persistent confirmation storage; legacy `MINISAGO_CALENDAR_DRAFTS_FILE` also works.           |
-| `DISCORD_CONTACTS_SPREADSHEET_ID` | Exact directory spreadsheet; defaults to the NTHUSA contact directory.                        |
-| `DISCORD_CONTACTS_SHEET_ID`       | Exact CSV tab ID, default `817689538`.                                                        |
+| Setting                           | Purpose / default                                                                                              |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `DISCORD_CALENDAR_ID`             | Required secondary calendar ID for event creation, edits and deletion. No fallback.                            |
+| `DISCORD_CALENDAR_NAME`           | Preview label, default `discord-calendar`.                                                                     |
+| `DISCORD_OFFICE_CALENDAR_ID`      | Read-only office calendar and optional invitation recipient; defaults to 學生會辦空間登記.                     |
+| `DISCORD_CALENDAR_GUILD_ID`       | Initial Calendar guild registration, default `1514899496797212683`; persistent feature policy controls access. |
+| `DISCORD_CALENDAR_ACCOUNT`        | Verified OAuth user, default `nthusa@gapp.nthu.edu.tw`.                                                        |
+| `DISCORD_CALENDAR_OAUTH_JSON`     | Host-only compact OAuth JSON; legacy `MINISAGO_GOOGLE_CALENDAR_OAUTH_JSON` remains supported.                  |
+| `DISCORD_CALENDAR_DRAFTS_FILE`    | Persistent confirmation storage; legacy `MINISAGO_CALENDAR_DRAFTS_FILE` also works.                            |
+| `DISCORD_CONTACTS_SPREADSHEET_ID` | Exact directory spreadsheet; defaults to the NTHUSA contact directory.                                         |
+| `DISCORD_CONTACTS_SHEET_ID`       | Exact CSV tab ID, default `817689538`.                                                                         |
 
 The event and office calendar IDs must differ. Missing or invalid destination
 settings disable Calendar tools. Only the dedicated event calendar accepts

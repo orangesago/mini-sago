@@ -132,6 +132,7 @@ type DiscordMessageCreate = {
   webhook_id?: string;
   author?: DiscordUser;
   member?: {
+    roles?: string[];
     nick?: string | null;
     avatar?: string | null;
   };
@@ -729,6 +730,7 @@ class InstagramGatewayClient implements VoiceGateway {
         this.featureAvailability.isEnabled("ambient_reactions", {
           guildId: message.guild_id,
           channelId: message.channel_id,
+          roleIds: message.member?.roles,
         })
       ) {
         this.ambientReactions.observe({

@@ -8,6 +8,7 @@ import {
 } from "./calendar-confirmation";
 import {
   CALENDAR_GUILD_ID,
+  createGoogleCalendarClient,
   type GoogleCalendarClient,
 } from "./google-calendar";
 import type { DiscordRequest } from "../discord/api/request";
@@ -320,4 +321,62 @@ test("raw calendar recipients cannot publish a preview and moving away explicitl
   expect(f.messages[0].body.content).toContain("guest@example.com");
   expect(f.messages[0].body.content).not.toContain(config.officeCalendarId);
   expect(f.mutations).toHaveLength(0);
+});
+
+test("revoked access cannot post a new confirmation preview", async () => {
+  const f = fixture();
+  const wrapped = withCalendarConfirmation(
+    f.client,
+    f.context,
+    f.discord,
+    async () => false,
+  );
+  const result = await wrapped.call("create_calendar_event", {
+    title: "Denied",
+    operationKey: "denied",
+    schedule: { kind: "all_day", start: "2026-10-18", end: "2026-10-19" },
+  });
+  expect(result.status).toBe("unavailable");
+  expect(f.mutations).toHaveLength(0);
+  expect(f.messages).toHaveLength(0);
+});
+
+test("losing the allowed role after a preview prevents confirmation from reaching Google", async () => {
+  const f = fixture();
+  const guildId = "1394943277836402779";
+  const client = { ...f.client, config: { ...f.client.config, guildId } };
+  const wrapped = withCalendarConfirmation(
+    client,
+    { ...f.context, guildId },
+    f.discord,
+    async () => true,
+  );
+  expect((await wrapped.call("create_calendar_event", booking)).status).toBe(
+    "awaiting_confirmation",
+  );
+  let calls = 0;
+  const request = (async () => {
+    calls++;
+    throw new Error("Google must not be contacted");
+  }) as unknown as typeof fetch;
+  const oauthEnv = {
+    DISCORD_CALENDAR_ID: config.calendarId,
+    DISCORD_CALENDAR_OAUTH_JSON: JSON.stringify({
+      client_id: "test.apps.googleusercontent.com",
+      client_secret: "test",
+      refresh_token: "test",
+    }),
+  };
+  await handleCalendarConfirmation(
+    {
+      ...f.button("confirm", "requester1", guildId),
+      member: { user: { id: "requester1" }, roles: [] },
+    },
+    f.discord,
+    oauthEnv,
+    (env, context) => createGoogleCalendarClient(env, context, request),
+  );
+  expect(calls).toBe(0);
+  expect(f.mutations).toHaveLength(0);
+  expect(f.messages.at(-1)?.body.content).toContain("活動操作尚未完成");
 });
