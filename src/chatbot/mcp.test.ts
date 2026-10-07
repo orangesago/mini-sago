@@ -144,6 +144,7 @@ describe("MiniSago MCP server", () => {
           trip_planner: policy,
           ccxp_meetings: policy,
           developer_steering: policy,
+          calendar: policy,
         },
       }),
       configureFeatureAvailability: async (input) => {
@@ -209,6 +210,37 @@ describe("MiniSago MCP server", () => {
       feature: "ccxp_meetings",
     });
 
+    const filtered = await client.callTool({
+      name: "configure_feature_availability",
+      arguments: {
+        feature: "calendar",
+        scope: "guild",
+        targetId: "1394943277836402779",
+        action: "enable",
+        allowRoleIds: ["1394944058534920213"],
+        denyRoleIds: [],
+      },
+    });
+    expect(filtered.structuredContent).toMatchObject({
+      status: "complete",
+      feature: "calendar",
+    });
+    expect(configured.at(-1)).toMatchObject({
+      allowRoleIds: ["1394944058534920213"],
+      denyRoleIds: [],
+    });
+    const invalid = await client.callTool({
+      name: "configure_feature_availability",
+      arguments: {
+        feature: "calendar",
+        scope: "guild",
+        targetId: "1394943277836402779",
+        action: "enable",
+        allowRoleIds: ["bad-role"],
+      },
+    });
+    expect(invalid.isError).toBe(true);
+    expect(configured).toHaveLength(3);
     await client.close();
     session.revoke();
   });

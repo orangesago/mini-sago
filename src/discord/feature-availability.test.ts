@@ -67,6 +67,7 @@ describe("feature availability", () => {
       "ambient_reactions",
       "trip_planner",
       "ccxp_meetings",
+      "calendar",
       "developer_steering",
     ]);
   });
@@ -240,5 +241,148 @@ describe("feature availability", () => {
       action: "inherit",
     });
     expect(reloaded.isEnabled("chatbot", { guildId, channelId })).toBe(true);
+  });
+});
+
+describe("role-filtered feature registrations", () => {
+  const guildId = "1394943277836402779";
+  const role = "1394944058534920213";
+  const blocked = "1394944058534920214";
+  test("calendar migration grants only the approved role and preserves later revocation", async () => {
+    const { directory, store: availability } = await store();
+    expect(availability.isEnabled("calendar", { guildId })).toBe(false);
+    expect(availability.isEnabled("calendar", { guildId, roleIds: [] })).toBe(
+      false,
+    );
+    expect(
+      availability.isEnabled("calendar", { guildId, roleIds: [role] }),
+    ).toBe(true);
+    const file = join(directory, "legacy-calendar.json");
+    const { calendar, ...features } = availability.list().features;
+    await writeFile(file, JSON.stringify({ version: 1, features }));
+    const migrated = new FeatureAvailabilityStore(file, {});
+    expect(migrated.list().features.calendar).toEqual(calendar);
+    await migrated.configure({
+      feature: "calendar",
+      scope: "guild",
+      targetId: guildId,
+      action: "disable",
+    });
+    expect(
+      new FeatureAvailabilityStore(file, {}).isEnabled("calendar", {
+        guildId,
+        roleIds: [role],
+      }),
+    ).toBe(false);
+    expect(availability.isEnabled("calendar", { roleIds: [role] })).toBe(false);
+  });
+  test("deny wins, unknown roles fail closed, and omitted or empty filters remove restrictions", async () => {
+    const { directory, store: availability } = await store();
+    const input = {
+      feature: "chatbot" as const,
+      scope: "guild" as const,
+      targetId: guildId,
+      action: "enable" as const,
+    };
+    await availability.configure({
+      ...input,
+      allowRoleIds: [role],
+      denyRoleIds: [blocked],
+    });
+    expect(
+      availability.isEnabled("chatbot", { guildId, roleIds: [role] }),
+    ).toBe(true);
+    expect(
+      availability.isEnabled("chatbot", { guildId, roleIds: [role, blocked] }),
+    ).toBe(false);
+    expect(availability.isEnabled("chatbot", { guildId, roleIds: [] })).toBe(
+      false,
+    );
+    await availability.configure({ ...input, denyRoleIds: [blocked] });
+    expect(availability.isEnabled("chatbot", { guildId })).toBe(false);
+    expect(availability.isEnabled("chatbot", { guildId, roleIds: [] })).toBe(
+      true,
+    );
+    expect(
+      new FeatureAvailabilityStore(
+        join(directory, "features.json"),
+        {},
+      ).isEnabled("chatbot", { guildId, roleIds: [blocked] }),
+    ).toBe(false);
+    await availability.configure({
+      ...input,
+      allowRoleIds: [],
+      denyRoleIds: [],
+    });
+    expect(availability.isEnabled("chatbot", { guildId })).toBe(true);
+    await availability.configure({ ...input, allowRoleIds: [role] });
+    await availability.configure(input);
+    expect(availability.list().features.chatbot.rules[0]).toEqual({
+      scope: "guild",
+      targetId: guildId,
+      enabled: true,
+    });
+  });
+  test("channel filters override guild grants without falling through, and inherit restores them", async () => {
+    const { store: availability } = await store();
+    const channelId = "1517766866964316201";
+    await availability.configure({
+      feature: "trip_planner",
+      scope: "guild",
+      targetId: guildId,
+      action: "enable",
+    });
+    await availability.configure({
+      feature: "trip_planner",
+      scope: "channel",
+      targetId: channelId,
+      action: "enable",
+      allowRoleIds: [role],
+    });
+    expect(
+      availability.isEnabled("trip_planner", {
+        guildId,
+        channelId,
+        roleIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      availability.isEnabled("trip_planner", {
+        guildId,
+        channelId,
+        roleIds: [role],
+      }),
+    ).toBe(true);
+    await availability.configure({
+      feature: "trip_planner",
+      scope: "channel",
+      targetId: channelId,
+      action: "inherit",
+    });
+    expect(availability.isEnabled("trip_planner", { guildId, channelId })).toBe(
+      true,
+    );
+  });
+  test("invalid filters are rejected before persistence", async () => {
+    const { store: availability } = await store();
+    const input = {
+      feature: "calendar" as const,
+      scope: "guild" as const,
+      targetId: guildId,
+      action: "enable" as const,
+    };
+    await expect(
+      availability.configure({ ...input, allowRoleIds: ["invalid"] }),
+    ).rejects.toThrow("valid Discord role IDs");
+    await expect(
+      availability.configure({
+        ...input,
+        action: "disable",
+        allowRoleIds: [role],
+      }),
+    ).rejects.toThrow("only to enabled");
+    await expect(
+      availability.configure({ ...input, scope: "channel" }),
+    ).rejects.toThrow("guild scope");
   });
 });
