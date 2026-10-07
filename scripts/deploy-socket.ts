@@ -21,9 +21,25 @@ export async function requestMinisagoDeployment(
   return await new Promise<string>((resolve, reject) => {
     const socket = createConnection(socketPath);
     let response = "";
+    let settled = false;
     const timeout = setTimeout(() => {
       socket.destroy(new Error("MiniSago deployment socket timed out."));
     }, RESPONSE_TIMEOUT_MS);
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      const result = response.trim();
+      if (result === `accepted ${commit}`) {
+        resolve(result);
+      } else {
+        reject(
+          new Error(result || "MiniSago deployment socket closed silently."),
+        );
+      }
+    };
 
     socket.setEncoding("utf8");
     socket.on("connect", () => socket.write(`deploy ${commit} ${channelId}\n`));
@@ -33,22 +49,17 @@ export async function requestMinisagoDeployment(
         socket.destroy(
           new Error("MiniSago deployment socket returned too much data."),
         );
+        return;
       }
+      // systemd can hold the connection open until deployment finishes.
+      if (response.includes("\n")) finish();
     });
     socket.on("error", (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       reject(error);
     });
-    socket.on("close", () => {
-      clearTimeout(timeout);
-      const result = response.trim();
-      if (result === `accepted ${commit}`) {
-        resolve(result);
-      } else {
-        reject(
-          new Error(result || "MiniSago deployment socket closed silently."),
-        );
-      }
-    });
+    socket.on("close", finish);
   });
 }
