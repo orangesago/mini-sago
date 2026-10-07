@@ -59,3 +59,24 @@ test("rejects a host denial", async () => {
     server.close((error) => (error ? reject(error) : resolve())),
   );
 });
+
+test("accepts a complete acknowledgment while the host keeps the connection open", async () => {
+  const root = await mkdtemp(join(tmpdir(), "minisago-deploy-socket-"));
+  roots.push(root);
+  const socketPath = join(root, "deploy.sock");
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const server = createServer((socket) => {
+    socket.once("data", () => {
+      socket.write(`accepted ${commit.slice(0, 20)}`);
+      setTimeout(() => socket.write(`${commit.slice(20)}\n`), 10);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+  try {
+    await expect(
+      requestMinisagoDeployment(socketPath, commit, "1282936453134815275"),
+    ).resolves.toBe(`accepted ${commit}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
